@@ -10,6 +10,7 @@ import { ErrorText, Header, Loading, Spacer, Toast } from '../components/Layout'
 import { BLANKET_SLOTS, EMOTIONS, MAX_EMOTIONS, STORY_MAX_LENGTH, countLabel, emotionLabel } from '../constants/emotions';
 import { useDraft } from '../providers/DraftProvider';
 import type { EmotionCode, ReceivedPatch } from '../types/api';
+import yarnBall from '../assets/brand/yarn-ball.webp';
 
 /** 기록 → 지도 → 받기로 넘겨주는 값 */
 interface RecordState {
@@ -195,6 +196,17 @@ export function WarmthMapPage() {
   );
 }
 
+/** 215 도착하는 중 — 털실 공과 순서대로 깜빡이는 점 */
+function PatchArriving() {
+  return (
+    <div className="arriving" role="status">
+      <img className="arriving-ball" src={yarnBall} alt="" width={192} height={192} />
+      <span className="arriving-dots" aria-hidden><i /><i /><i /></span>
+      <p className="arriving-text">같은 마음에서 패치가 오고 있어요</p>
+    </div>
+  );
+}
+
 /** 물결 한 주기(55) — 같은 모양을 이어 붙여 왼쪽으로 한 주기만큼 흘려보낸다 */
 const WAVE_PERIOD = 55;
 const WAVE_PATH = Array.from({ length: 4 }, (_, i) => {
@@ -295,7 +307,7 @@ export function ReceivePage() {
   });
 
   if (!rec) return (<><Header title="패치 받기" back /><p className="state-text">먼저 마음을 골라 주세요</p></>);
-  if (receive.isPending) return (<><Header title="패치 받기" back /><Loading text="같은 마음에서 패치가 오고 있어요" /></>);
+  if (receive.isPending) return (<><Header title="패치 받기" back /><PatchArriving /></>);
   if (receive.isError) {
     // TODO(백엔드): 409(이미 받음)일 때 오늘 받은 패치 재조회 방법 확정 필요
     return (<><Header title="패치 받기" back /><ErrorText text={parseApiError(receive.error).message} /></>);

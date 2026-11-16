@@ -614,6 +614,45 @@
   height: 40px;
   font-size: 14px;
 }
+/* ───────── 215 도착하는 중 ───────── */
+.arriving {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-top: 182px;
+}
+.arriving-ball {
+  display: block;
+  width: 192px;
+  height: 192px;
+}
+.arriving-dots {
+  display: flex;
+  gap: 6px;
+  margin-top: 48px;
+}
+.arriving-dots i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-main-line);
+  animation: arriving-dot 1.2s ease-in-out infinite;
+}
+.arriving-dots i:nth-child(2) { animation-delay: 0.2s; }
+.arriving-dots i:nth-child(3) { animation-delay: 0.4s; }
+@keyframes arriving-dot {
+  0%, 60%, 100% { background: var(--color-main-line); }
+  20% { background: var(--color-warm-point); }
+}
+.arriving-text {
+  margin: 118px 0 0;
+  font: var(--text-m-bold);
+  color: var(--color-bk);
+}
+@media (prefers-reduced-motion: reduce) {
+  .arriving-dots i { animation: none; }
+  .arriving-dots i:first-child { background: var(--color-warm-point); }
+}
 .swipe-hint {
   display: flex;
   flex-direction: column;
