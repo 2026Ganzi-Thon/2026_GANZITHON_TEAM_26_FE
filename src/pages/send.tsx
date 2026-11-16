@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { parseApiError } from '../api/errors';
 import { patchApi } from '../api/patch';
 import { ErrorText, Header, Loading, Spacer } from '../components/Layout';
+import moonUrl from '../assets/illust/patch-moon.svg';
 import { PATCH_MAX_LENGTH, emotionLabel } from '../constants/emotions';
 import type { EmotionCode } from '../types/api';
 
@@ -57,12 +58,15 @@ export function SendPage() {
     return (
       <>
         <Header title="패치 선물하기" />
-        <h2 className="page-title">패치를 보냈어요</h2>
-        <p className="page-sub">같은 마음인 누군가에게 전해질 거예요</p>
+        <div className="sent-done">
+          <img className="sent-moon" src={moonUrl} alt="" width={200} height={180} />
+          <h2 className="page-title">패치를 건넸어요</h2>
+          <p className="page-sub">같은 마음인 누군가에게 닿을 거예요</p>
+        </div>
         <Spacer />
-        <button className="btn" onClick={() => setDone(false)}>하나 더 보내기</button>
+        <button className="btn" onClick={() => navigate('/blanket')}>내 담요 보기</button>
         <div className="btn-row">
-          <button className="btn secondary" onClick={() => navigate('/blanket')}>내 담요 보기</button>
+          <button className="btn secondary" onClick={() => setDone(false)}>패치 더 선물하기</button>
         </div>
       </>
     );

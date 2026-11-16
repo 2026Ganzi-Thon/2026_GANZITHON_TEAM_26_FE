@@ -1,7 +1,7 @@
 /** 4xx 기록·담요 — 401 캘린더 + 그날 기록 시트, 407 상세, 408 지우기, 409~412 담요 */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { isAxiosError } from 'axios';
-import { useState, type CSSProperties } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { parseApiError } from '../api/errors';
 import { blanketApi, recordApi, toTime } from '../api/patch';
@@ -20,6 +20,61 @@ const dayTitle = (date: string) => {
 };
 
 /* ───────── 401 기록 캘린더 + 그날 기록(바텀시트) ───────── */
+/** 시트 손잡이를 위로 끌면 전체화면, 아래로 끌면 원래 자리. 탭하면 전환 */
+const SHEET_DRAG_THRESHOLD = 48;
+function useSheetDrag() {
+  const [expanded, setExpanded] = useState(false);
+  const [dragY, setDragY] = useState(0);
+  const start = useRef<{ y: number; moved: boolean } | null>(null);
+
+  // 전체화면일 때 뒤 화면 스크롤 막기 + Esc로 닫기
+  useEffect(() => {
+    if (!expanded) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setExpanded(false);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      document.body.style.overflow = prev;
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [expanded]);
+
+  const onPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
+    start.current = { y: e.clientY, moved: false };
+    e.currentTarget.setPointerCapture(e.pointerId);
+  };
+  const onPointerMove = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (!start.current) return;
+    const dy = e.clientY - start.current.y;
+    if (Math.abs(dy) > 6) start.current.moved = true;
+    // 접힌 상태는 위로만, 펼친 상태는 아래로만 따라온다
+    setDragY(expanded ? Math.max(0, dy) : Math.max(-160, Math.min(0, dy)));
+  };
+  const finish = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (!start.current) return;
+    const dy = e.clientY - start.current.y;
+    const moved = start.current.moved;
+    start.current = null;
+    setDragY(0);
+    if (!moved) setExpanded((v) => !v);
+    else if (!expanded && dy < -SHEET_DRAG_THRESHOLD) setExpanded(true);
+    else if (expanded && dy > SHEET_DRAG_THRESHOLD) setExpanded(false);
+  };
+  const cancel = () => {
+    start.current = null;
+    setDragY(0);
+  };
+
+  return {
+    expanded,
+    setExpanded,
+    dragging: dragY !== 0,
+    style: dragY ? ({ transform: `translateY(${dragY}px)` } as CSSProperties) : undefined,
+    grabHandlers: { onPointerDown, onPointerMove, onPointerUp: finish, onPointerCancel: cancel },
+  };
+}
+
 export function RecordsPage() {
   const navigate = useNavigate();
   const [now] = useState(() => new Date());
@@ -31,6 +86,7 @@ export function RecordsPage() {
 
   const calendar = useQuery({ queryKey: ['calendar', yearMonth], queryFn: () => recordApi.calendar(yearMonth) });
   const day = useQuery({ queryKey: ['records', selected], queryFn: () => recordApi.byDate(selected) });
+  const sheet = useSheetDrag();
 
   const move = (delta: number) => {
     const d = new Date(year, month - 1 + delta, 1);
@@ -76,9 +132,28 @@ export function RecordsPage() {
       </div>
       <p className="legend"><span><i />마음 기록</span><span><i className="hollow" />패치만 보낸 날</span></p>
 
-      <section className="day-sheet" aria-label="그날 기록">
-        <div className="handle" />
-        <h3>{dayTitle(selected)}</h3>
+      <section
+        className={`day-sheet${sheet.expanded ? ' expanded' : ''}${sheet.dragging ? ' dragging' : ''}`}
+        style={sheet.style}
+        aria-label="그날 기록"
+      >
+        <div
+          className="sheet-grab"
+          role="button"
+          tabIndex={0}
+          aria-expanded={sheet.expanded}
+          aria-label={sheet.expanded ? '그날 기록 접기' : '그날 기록 크게 보기'}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              sheet.setExpanded(!sheet.expanded);
+            }
+          }}
+          {...sheet.grabHandlers}
+        >
+          <div className="handle" />
+          <h3>{dayTitle(selected)}</h3>
+        </div>
         {day.isPending && <Loading />}
         {day.isError && <ErrorText text={parseApiError(day.error).message} />}
         {day.data && (

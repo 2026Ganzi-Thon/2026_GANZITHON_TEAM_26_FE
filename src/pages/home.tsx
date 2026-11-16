@@ -133,7 +133,7 @@ export function StoryPage() {
 
 /** Figma 208: 인원 구간마다 동그라미 크기가 커짐 (20~29명 = 96px) */
 function circleSize(count: number) {
-  if (count < 5) return 76;
+  if (count < 5) return 68; // 5명 미만도 가장 작은 동그라미 (5~9명과 같은 크기)
   if (count < 10) return 68;
   if (count < 20) return 82;
   if (count < 30) return 96;
@@ -160,7 +160,7 @@ export function WarmthMapPage() {
   const { mode, count, noBlanketNotice } = map.data;
   const size = mode === 'NOW' ? circleSize(count) : 76;
   const headline =
-    mode === 'NOW' ? `지금 ${countLabel(count)}이 같은 마음이에요`
+    mode === 'NOW' ? (count < 5 ? '누군가도 지금 이 마음이에요' : `지금 ${countLabel(count)}이 같은 마음이에요`)
     : mode === 'QUIET_7D' ? '지금은 조용한 시간이에요'
     : '당신이 첫 빛이에요';
 
@@ -174,7 +174,7 @@ export function WarmthMapPage() {
 
       <div className="warmth-card" aria-label={headline}>
         <div className="warmth-halo" style={{ width: size + 38, height: size + 38 }}>
-          <div className={`warmth-circle ${count < 5 ? 'small' : ''}`} style={{ width: size, height: size }}>
+          <div className="warmth-circle" style={{ width: size, height: size }}>
             {mode === 'NOW' ? countLabel(count) : '✦'}
           </div>
         </div>

@@ -485,9 +485,6 @@
   white-space: nowrap;
   transition: width 0.5s, height 0.5s;
 }
-.warmth-circle.small {
-  font-size: 13px;
-}
 .offline-banner {
   margin-top: 12px;
   padding: 10px 14px;
@@ -897,6 +894,29 @@
   border-radius: 20px 20px 0 0;
   background: #fff;
   box-shadow: 0 -4px 16px rgba(34, 34, 34, 0.06);
+  position: relative;
+  z-index: 2;
+  transition: transform 0.2s ease;
+}
+.day-sheet.dragging {
+  transition: none;
+}
+/* 손잡이 영역 — 위로 끌면 전체화면, 아래로 끌면 접힘 */
+.sheet-grab {
+  margin: -10px calc(var(--page-x) * -1) 0;
+  padding: 10px var(--page-x) 4px;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.sheet-grab:active {
+  cursor: grabbing;
+}
+.sheet-grab:focus-visible {
+  outline: 2px solid var(--color-main-line);
+  outline-offset: -2px;
+  border-radius: 20px 20px 0 0;
 }
 .day-sheet .handle {
   width: 36px;
@@ -908,6 +928,40 @@
 .day-sheet h3 {
   margin: 0;
   font: var(--text-title);
+}
+/* 전체화면: 헤더(도움 요청 버튼) 아래 ~ 탭바 위를 덮는다 */
+.day-sheet.expanded {
+  position: fixed;
+  z-index: 6;
+  top: 53px;
+  bottom: var(--tabbar-height);
+  left: 0;
+  right: 0;
+  width: 100%;
+  max-width: var(--app-max-width);
+  margin: 0 auto;
+  padding-top: 0;
+  padding-bottom: 24px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  box-shadow: 0 -4px 24px rgba(34, 34, 34, 0.1);
+  animation: sheet-up 0.24s ease-out;
+}
+.day-sheet.expanded .sheet-grab {
+  position: sticky;
+  top: 0;
+  margin-top: 0;
+  z-index: 1;
+  background: #fff;
+  padding-bottom: 10px;
+}
+@keyframes sheet-up {
+  from {
+    transform: translateY(40%);
+  }
+  to {
+    transform: translateY(0);
+  }
 }
 .gift-banner {
   margin-top: 14px;
@@ -1209,4 +1263,40 @@ button.tile:active {
   background: #333;
   color: #fff;
   font: var(--text-m-bold);
+}
+
+/* 308 발송 완료 — 잠든 초승달 */
+.sent-done {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-top: 40px;
+  text-align: center;
+}
+.sent-moon {
+  width: 200px;
+  max-width: 60%;
+  height: auto;
+  animation: moon-float 4s ease-in-out infinite;
+}
+.sent-done .page-title {
+  margin-top: 16px;
+}
+@keyframes moon-float {
+  0%,
+  100% {
+    transform: translateY(0) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-6px) rotate(-2deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sent-moon,
+  .day-sheet.expanded {
+    animation: none;
+  }
+  .day-sheet {
+    transition: none;
+  }
 }
