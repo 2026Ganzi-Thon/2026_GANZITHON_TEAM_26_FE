@@ -974,6 +974,64 @@
     repeating-linear-gradient(-60deg, rgba(0, 0, 0, 0.08) 0 2px, transparent 2px 6px);
   box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.06);
 }
+button.tile {
+  padding: 0;
+  cursor: pointer;
+}
+button.tile:active {
+  transform: scale(0.94);
+}
+/* 413/414 담요 칸 패치 카드 */
+.slot-card {
+  width: min(364px, 100%);
+  overflow: hidden;
+  border-radius: 20px;
+  background: #fff;
+}
+.slot-card-top {
+  padding: 24px 24px 28px;
+  background: var(--color-emo-1);
+}
+.slot-no {
+  font: var(--text-m);
+  color: var(--color-gray-sub);
+}
+.thread.wide {
+  display: block;
+  width: 224px;
+  height: 24px;
+  margin-top: 4px;
+  color: var(--color-warm-point);
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 10%, #000 90%, transparent);
+  mask-image: linear-gradient(to right, transparent, #000 10%, #000 90%, transparent);
+}
+.slot-card .message {
+  margin: 20px 0 0;
+  font: 500 20px/1.45 var(--font-family);
+  color: var(--color-bk);
+  word-break: keep-all;
+}
+.slot-card .from {
+  margin: 16px 0 0;
+  font: var(--text-m);
+  color: var(--color-gray-sub);
+}
+.slot-card-bottom {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 20px 24px 24px;
+}
+.slot-card .received {
+  margin: 0 0 4px;
+  font: var(--text-caption);
+  color: var(--color-gray-sub);
+}
+.btn.soft {
+  border-color: var(--color-main);
+  background: var(--color-main);
+  color: var(--color-bk);
+}
 .progress-row {
   display: flex;
   justify-content: space-between;

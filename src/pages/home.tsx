@@ -203,9 +203,9 @@ const WAVE_PATH = Array.from({ length: 4 }, (_, i) => {
 }).join('');
 
 /** 패치 카드 위 실 무늬 (Figma 216/217) — 잔잔하게 흐르는 물결 */
-function Thread() {
+export function Thread({ className = '' }: { className?: string }) {
   return (
-    <svg className="thread" viewBox="0 0 112 12" fill="none" aria-hidden>
+    <svg className={`thread ${className}`.trim()} viewBox="0 0 112 12" fill="none" aria-hidden>
       <g className="thread-flow">
         <path d={WAVE_PATH} stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
       </g>

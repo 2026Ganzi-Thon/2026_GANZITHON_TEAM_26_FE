@@ -57,7 +57,7 @@ export const featureHandlers = [
     const patches = emotions.map((emotion) => {
       const queued = fourthOrLater ? null : takeFromQueue(emotion);
       if (queued) db.delivered.set(queued.id, { emotion, reported: false });
-      return toReceived(emotion, queued, !fourthOrLater);
+      return toReceived(emotion, queued, !fourthOrLater, body.recordId ?? null);
     });
     if (body.recordId) {
       db.receivedRecordIds.add(body.recordId);
@@ -76,7 +76,11 @@ export const featureHandlers = [
     info.reported = true;
     const queued = takeFromQueue(info.emotion);
     if (queued) db.delivered.set(queued.id, { emotion: info.emotion, reported: false });
-    return ok({ replaced: toReceived(info.emotion, queued, false) });
+    const replaced = toReceived(info.emotion, queued, false);
+    // 담요 칸에 남은 신고된 글도 교체한 글로 바꾼다
+    const slot = db.blankets.flatMap((b) => b.slots).find((x) => x?.patchMessageId === Number(params.id));
+    if (slot) { slot.message = replaced.message; slot.patchMessageId = replaced.patchMessageId; }
+    return ok({ replaced });
   }),
 
   /* BLK-SEND-002 검사·발송 */
@@ -106,7 +110,14 @@ export const featureHandlers = [
     const pos = db.blankets.indexOf(blanket);
     return ok({
       blanketId: blanket.id,
-      slots: blanket.slots.map((emotion, index) => ({ index, emotion, filled: emotion !== null })),
+      slots: blanket.slots.map((s, index) => ({
+        index,
+        emotion: s?.emotion ?? null,
+        filled: s !== null,
+        message: s?.message ?? null,
+        receivedAt: s?.receivedAt ?? null,
+        recordId: s?.recordId ?? null,
+      })),
       hasPrev: pos > 0,
       hasNext: pos < db.blankets.length - 1,
     });

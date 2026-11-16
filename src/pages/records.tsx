@@ -1,5 +1,6 @@
 /** 4xx 기록·담요 — 401 캘린더 + 그날 기록 시트, 407 상세, 408 지우기, 409~412 담요 */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { isAxiosError } from 'axios';
 import { useState, type CSSProperties } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { parseApiError } from '../api/errors';
@@ -8,6 +9,8 @@ import BackIcon from '../assets/icons/back.svg?react';
 import ChevronRight from '../assets/icons/chevron-right.svg?react';
 import { ConfirmModal, ErrorText, Header, Loading, Spacer } from '../components/Layout';
 import { BLANKET_SLOTS, emotionColor, emotionLabel } from '../constants/emotions';
+import type { BlanketSlot } from '../types/api';
+import { Thread } from './home';
 
 const pad = (n: number) => String(n).padStart(2, '0');
 const WEEK = ['일', '월', '화', '수', '목', '금', '토'];
@@ -179,6 +182,7 @@ export function RecordDetailPage() {
 export function BlanketPage() {
   const navigate = useNavigate();
   const [blanketId, setBlanketId] = useState<number | undefined>();
+  const [openSlot, setOpenSlot] = useState<BlanketSlot | null>(null);
   const blanket = useQuery({ queryKey: ['blanket', blanketId ?? 'current'], queryFn: () => blanketApi.get(blanketId) });
 
   if (blanket.isPending) return (<><Header title="담요" /><Loading /></>);
@@ -198,10 +202,20 @@ export function BlanketPage() {
       </div>
 
       <div className="blanket" aria-label={`담요 ${filled}칸 채워짐`}>
-        {b.slots.map((s) => (
-          // BLK-VIEW-002 패치 카드 조회(413)는 P1 — 지금은 칸 색만 표시
-          <div key={s.index} className={`tile ${s.filled ? 'filled' : ''}`} style={s.filled ? ({ '--knit': emotionColor(s.emotion) } as CSSProperties) : undefined} />
-        ))}
+        {b.slots.map((s) =>
+          s.filled ? (
+            // BLK-VIEW-002 채워진 칸을 누르면 그 칸의 패치 카드(413)
+            <button
+              key={s.index}
+              className="tile filled"
+              style={{ '--knit': emotionColor(s.emotion) } as CSSProperties}
+              aria-label={`${s.index + 1}번째 칸 패치 보기`}
+              onClick={() => setOpenSlot(s)}
+            />
+          ) : (
+            <div key={s.index} className="tile" />
+          ),
+        )}
       </div>
 
       <div className="progress-row">
@@ -229,6 +243,51 @@ export function BlanketPage() {
           {b.hasPrev && <button className="btn secondary" onClick={() => setBlanketId(b.blanketId - 1)}>지난 담요 보기</button>}
         </>
       ) : null}
+
+      {openSlot && <BlanketPatchModal slot={openSlot} onClose={() => setOpenSlot(null)} />}
     </>
+  );
+}
+
+const receivedLabel = (iso: string) => {
+  const d = new Date(iso);
+  return `${d.getMonth() + 1}월 ${d.getDate()}일 ${toTime(iso)}에 받았어요`;
+};
+
+/** 413/414 담요 칸 패치 카드 — 받은 패치 글과 그날 기록으로 가는 길 */
+function BlanketPatchModal({ slot, onClose }: { slot: BlanketSlot; onClose: () => void }) {
+  const navigate = useNavigate();
+  const recordId = slot.recordId ?? null;
+  // 기록이 지워졌는지(414) 확인. 지운 직후에도 맞도록 열 때마다 다시 확인한다
+  const record = useQuery({
+    queryKey: ['record', String(recordId)],
+    queryFn: () => recordApi.detail(recordId!),
+    enabled: recordId !== null,
+    retry: false,
+    refetchOnMount: 'always',
+  });
+  const deleted = record.isError && isAxiosError(record.error) && record.error.response?.status === 404;
+
+  return (
+    <div className="dim" role="dialog" aria-modal="true" aria-label={`${slot.index + 1}번째 칸 패치`} onClick={onClose}>
+      <div className="slot-card" onClick={(e) => e.stopPropagation()}>
+        <div className="slot-card-top">
+          <span className="slot-no">{slot.index + 1}번째 칸</span>
+          <Thread className="wide" />
+          <p className="message">{slot.message ?? '따뜻한 패치가 담겨 있어요'}</p>
+          <p className="from">같은 마음을 지나온 누군가</p>
+        </div>
+        <div className="slot-card-bottom">
+          {slot.receivedAt && <p className="received">{receivedLabel(slot.receivedAt)}</p>}
+          {recordId !== null &&
+            (deleted ? (
+              <button className="btn" disabled>이날의 기록은 지워졌어요</button>
+            ) : (
+              <button className="btn secondary" onClick={() => navigate(`/records/${recordId}`)}>이날의 기록 보기</button>
+            ))}
+          <button className="btn soft" onClick={onClose}>닫기</button>
+        </div>
+      </div>
+    </div>
   );
 }
