@@ -1,0 +1,55 @@
+/*
+ * PATCH 디자인 토큰 — Figma "패치 UI (작업용)" 최종 파일의 변수(Variables) 기준
+ */
+:root {
+  /* Brand */
+  --color-primary: #7a5c48; /* 주 버튼 (흰 글씨 대비 6.1:1) */
+  --color-on-primary: #ffffff;
+  --color-main: #f5eee6; /* 메인 배경 */
+  --color-main-strong: #eadccd; /* 메인 진한 톤 · 선택 */
+  --color-main-line: #d9c6b3; /* 선택 테두리 */
+  --color-warm-point: #a9785c; /* 온기 동그라미 · 강조 */
+
+  /* Gray */
+  --color-bk: #222222; /* 기본 텍스트 */
+  --color-gray-sub: #5f5f5f; /* 보조 텍스트 */
+  --color-gray-text: #767676; /* 플레이스홀더 · 비활성 텍스트 */
+  --color-gray-line: #bdbdbd; /* 입력 테두리 */
+  --color-gray-divider: #e6e6e6; /* 구분선 */
+  --color-gray-bg: #f4f4f4; /* 비활성 배경 */
+
+  /* Alert (도움 요청 · 경고) */
+  --color-alert: #c62828;
+  --color-alert-bg: #fdecec;
+
+  /* 담요 칸 색 (emo/1~6) — 감정 ↔ 색 매핑은 미확정 (src/constants/emotions.ts) */
+  --color-emo-1: #fff8e8;
+  --color-emo-2: #e8e3da;
+  --color-emo-3: #c9c2b7;
+  --color-emo-4: #9b7e6a;
+  --color-emo-5: #2e2a27;
+  --color-emo-6: #b3a293;
+
+  /* Typography (Noto Sans KR) */
+  --font-family: 'Noto Sans KR', system-ui, -apple-system, sans-serif;
+  --text-title-l: 700 24px/1.4 var(--font-family);
+  --text-title: 700 21px/1.4 var(--font-family);
+  --text-header: 700 18px/1.4 var(--font-family);
+  --text-body-l: 400 16px/1.4 var(--font-family);
+  --text-l: 400 15px/1.4 var(--font-family);
+  --text-m: 400 14px/1.4 var(--font-family);
+  --text-m-bold: 500 14px/1.4 var(--font-family);
+  --text-btn: 500 16px/1.4 var(--font-family);
+  --text-caption: 400 12.5px/1.4 var(--font-family);
+  --text-tab: 500 12px/1.4 var(--font-family);
+
+  /* Layout — Figma 프레임 기준 폭 (정확한 값은 디자이너 확인 필요) */
+  --app-max-width: 412px; /* Figma 프레임 412 × 917 */
+  --radius-sm: 8px;
+  --radius-md: 10px; /* 입력창·버튼 */
+  --radius-lg: 12px; /* 카드 */
+  --radius-xl: 16px; /* 큰 카드·지도 */
+  --page-x: 24px; /* 좌우 여백 */
+  --header-height: 56px;
+  --tabbar-height: 88px;
+}

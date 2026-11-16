@@ -1,0 +1,6 @@
+{
+  "rewrites": [
+    { "source": "/api/:path*", "destination": "https://nyam17.site/api/:path*" },
+    { "source": "/((?!api/|mockServiceWorker.js).*)", "destination": "/index.html" }
+  ]
+}
