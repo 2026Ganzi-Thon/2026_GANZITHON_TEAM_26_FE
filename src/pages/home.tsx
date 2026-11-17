@@ -10,6 +10,7 @@ import { ErrorText, Header, Loading, Spacer, Toast } from '../components/Layout'
 import { BLANKET_SLOTS, EMOTIONS, MAX_EMOTIONS, STORY_MAX_LENGTH, countLabel, emotionLabel } from '../constants/emotions';
 import { useDraft } from '../providers/DraftProvider';
 import type { EmotionCode, ReceivedPatch } from '../types/api';
+import yarnBall from '../assets/brand/yarn-ball.webp';
 
 /** 기록 → 지도 → 받기로 넘겨주는 값 */
 interface RecordState {
@@ -132,7 +133,7 @@ export function StoryPage() {
 
 /** Figma 208: 인원 구간마다 동그라미 크기가 커짐 (20~29명 = 96px) */
 function circleSize(count: number) {
-  if (count < 5) return 76;
+  if (count < 5) return 68; // 5명 미만도 가장 작은 동그라미 (5~9명과 같은 크기)
   if (count < 10) return 68;
   if (count < 20) return 82;
   if (count < 30) return 96;
@@ -159,7 +160,7 @@ export function WarmthMapPage() {
   const { mode, count, noBlanketNotice } = map.data;
   const size = mode === 'NOW' ? circleSize(count) : 76;
   const headline =
-    mode === 'NOW' ? `지금 ${countLabel(count)}이 같은 마음이에요`
+    mode === 'NOW' ? (count < 5 ? '누군가도 지금 이 마음이에요' : `지금 ${countLabel(count)}이 같은 마음이에요`)
     : mode === 'QUIET_7D' ? '지금은 조용한 시간이에요'
     : '당신이 첫 빛이에요';
 
@@ -173,7 +174,7 @@ export function WarmthMapPage() {
 
       <div className="warmth-card" aria-label={headline}>
         <div className="warmth-halo" style={{ width: size + 38, height: size + 38 }}>
-          <div className={`warmth-circle ${count < 5 ? 'small' : ''}`} style={{ width: size, height: size }}>
+          <div className="warmth-circle" style={{ width: size, height: size }}>
             {mode === 'NOW' ? countLabel(count) : '✦'}
           </div>
         </div>
@@ -195,6 +196,17 @@ export function WarmthMapPage() {
   );
 }
 
+/** 215 도착하는 중 — 털실 공과 순서대로 깜빡이는 점 */
+function PatchArriving() {
+  return (
+    <div className="arriving" role="status">
+      <img className="arriving-ball" src={yarnBall} alt="" width={192} height={192} />
+      <span className="arriving-dots" aria-hidden><i /><i /><i /></span>
+      <p className="arriving-text">같은 마음에서 패치가 오고 있어요</p>
+    </div>
+  );
+}
+
 /** 물결 한 주기(55) — 같은 모양을 이어 붙여 왼쪽으로 한 주기만큼 흘려보낸다 */
 const WAVE_PERIOD = 55;
 const WAVE_PATH = Array.from({ length: 4 }, (_, i) => {
@@ -203,9 +215,9 @@ const WAVE_PATH = Array.from({ length: 4 }, (_, i) => {
 }).join('');
 
 /** 패치 카드 위 실 무늬 (Figma 216/217) — 잔잔하게 흐르는 물결 */
-function Thread() {
+export function Thread({ className = '' }: { className?: string }) {
   return (
-    <svg className="thread" viewBox="0 0 112 12" fill="none" aria-hidden>
+    <svg className={`thread ${className}`.trim()} viewBox="0 0 112 12" fill="none" aria-hidden>
       <g className="thread-flow">
         <path d={WAVE_PATH} stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
       </g>
@@ -295,7 +307,7 @@ export function ReceivePage() {
   });
 
   if (!rec) return (<><Header title="패치 받기" back /><p className="state-text">먼저 마음을 골라 주세요</p></>);
-  if (receive.isPending) return (<><Header title="패치 받기" back /><Loading text="같은 마음에서 패치가 오고 있어요" /></>);
+  if (receive.isPending) return (<><Header title="패치 받기" back /><PatchArriving /></>);
   if (receive.isError) {
     // TODO(백엔드): 409(이미 받음)일 때 오늘 받은 패치 재조회 방법 확정 필요
     return (<><Header title="패치 받기" back /><ErrorText text={parseApiError(receive.error).message} /></>);

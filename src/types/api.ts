@@ -180,6 +180,10 @@ export interface BlanketSlot {
   index: number;
   emotion: EmotionCode | null;
   filled: boolean;
+  /** BLK-VIEW-002 칸을 채운 패치 (413). 서버 확정 전 목업 필드 */
+  message?: string | null;
+  receivedAt?: string | null;
+  recordId?: number | null;
 }
 export interface BlanketResponse {
   blanketId: number;

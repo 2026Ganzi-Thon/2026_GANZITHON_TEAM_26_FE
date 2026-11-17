@@ -4,6 +4,14 @@
 import { BLANKET_SLOTS, EMOTIONS } from '../constants/emotions';
 import type { EmotionCode, ReceivedPatch } from '../types/api';
 
+export interface MockSlot {
+  emotion: EmotionCode;
+  message: string;
+  receivedAt: string;
+  recordId: number | null;
+  patchMessageId: number | null;
+}
+
 export interface MockRecord {
   id: number;
   recordedAt: string; // ISO
@@ -45,7 +53,7 @@ export const db = {
   /** 패치 받기를 이미 한 기록 (재요청 409) */
   receivedRecordIds: new Set<number>(),
   delivered: new Map<number, { emotion: EmotionCode; reported: boolean }>(),
-  blankets: [{ id: 1, slots: Array.from({ length: BLANKET_SLOTS }, () => null as EmotionCode | null) }],
+  blankets: [{ id: 1, slots: Array.from({ length: BLANKET_SLOTS }, () => null as MockSlot | null) }],
   nextRecordId: 1,
 };
 
@@ -64,7 +72,7 @@ export function enqueue(emotion: EmotionCode, message: string) {
 }
 
 /** BLK-STACK-001: 현재 담요 다음 칸에 적립. 30칸이면 완성 후 새 담요 */
-export function stackOnBlanket(emotion: EmotionCode): { slotIndex: number; completed: boolean } {
+export function stackOnBlanket(slot: MockSlot): { slotIndex: number; completed: boolean } {
   let current = db.blankets[db.blankets.length - 1];
   let slotIndex = current.slots.findIndex((s) => s === null);
   if (slotIndex === -1) {
@@ -72,18 +80,19 @@ export function stackOnBlanket(emotion: EmotionCode): { slotIndex: number; compl
     db.blankets.push(current);
     slotIndex = 0;
   }
-  current.slots[slotIndex] = emotion;
+  current.slots[slotIndex] = slot;
   return { slotIndex, completed: slotIndex === BLANKET_SLOTS - 1 };
 }
 
 export const DEFAULT_COMFORT = '오늘도 여기까지 온 당신, 충분히 잘하고 있어요';
 
-export function toReceived(emotion: EmotionCode, queued: QueuedPatch | null, stack: boolean): ReceivedPatch {
-  const stacked = stack ? stackOnBlanket(emotion) : null;
+export function toReceived(emotion: EmotionCode, queued: QueuedPatch | null, stack: boolean, recordId: number | null = null): ReceivedPatch {
+  const message = queued?.message ?? DEFAULT_COMFORT;
+  const stacked = stack ? stackOnBlanket({ emotion, message, receivedAt: new Date().toISOString(), recordId, patchMessageId: queued?.id ?? null }) : null;
   return {
     patchMessageId: queued?.id ?? null,
     emotion,
-    message: queued?.message ?? DEFAULT_COMFORT,
+    message,
     isDefault: !queued,
     slotIndex: stacked?.slotIndex ?? null,
     blanketCompleted: stacked?.completed ?? false,

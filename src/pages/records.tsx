@@ -1,6 +1,7 @@
 /** 4xx 기록·담요 — 401 캘린더 + 그날 기록 시트, 407 상세, 408 지우기, 409~412 담요 */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState, type CSSProperties } from 'react';
+import { isAxiosError } from 'axios';
+import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { parseApiError } from '../api/errors';
 import { blanketApi, recordApi, toTime } from '../api/patch';
@@ -8,6 +9,8 @@ import BackIcon from '../assets/icons/back.svg?react';
 import ChevronRight from '../assets/icons/chevron-right.svg?react';
 import { ConfirmModal, ErrorText, Header, Loading, Spacer } from '../components/Layout';
 import { BLANKET_SLOTS, emotionColor, emotionLabel } from '../constants/emotions';
+import type { BlanketSlot } from '../types/api';
+import { Thread } from './home';
 
 const pad = (n: number) => String(n).padStart(2, '0');
 const WEEK = ['일', '월', '화', '수', '목', '금', '토'];
@@ -17,6 +20,61 @@ const dayTitle = (date: string) => {
 };
 
 /* ───────── 401 기록 캘린더 + 그날 기록(바텀시트) ───────── */
+/** 시트 손잡이를 위로 끌면 전체화면, 아래로 끌면 원래 자리. 탭하면 전환 */
+const SHEET_DRAG_THRESHOLD = 48;
+function useSheetDrag() {
+  const [expanded, setExpanded] = useState(false);
+  const [dragY, setDragY] = useState(0);
+  const start = useRef<{ y: number; moved: boolean } | null>(null);
+
+  // 전체화면일 때 뒤 화면 스크롤 막기 + Esc로 닫기
+  useEffect(() => {
+    if (!expanded) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setExpanded(false);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      document.body.style.overflow = prev;
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [expanded]);
+
+  const onPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
+    start.current = { y: e.clientY, moved: false };
+    e.currentTarget.setPointerCapture(e.pointerId);
+  };
+  const onPointerMove = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (!start.current) return;
+    const dy = e.clientY - start.current.y;
+    if (Math.abs(dy) > 6) start.current.moved = true;
+    // 접힌 상태는 위로만, 펼친 상태는 아래로만 따라온다
+    setDragY(expanded ? Math.max(0, dy) : Math.max(-160, Math.min(0, dy)));
+  };
+  const finish = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (!start.current) return;
+    const dy = e.clientY - start.current.y;
+    const moved = start.current.moved;
+    start.current = null;
+    setDragY(0);
+    if (!moved) setExpanded((v) => !v);
+    else if (!expanded && dy < -SHEET_DRAG_THRESHOLD) setExpanded(true);
+    else if (expanded && dy > SHEET_DRAG_THRESHOLD) setExpanded(false);
+  };
+  const cancel = () => {
+    start.current = null;
+    setDragY(0);
+  };
+
+  return {
+    expanded,
+    setExpanded,
+    dragging: dragY !== 0,
+    style: dragY ? ({ transform: `translateY(${dragY}px)` } as CSSProperties) : undefined,
+    grabHandlers: { onPointerDown, onPointerMove, onPointerUp: finish, onPointerCancel: cancel },
+  };
+}
+
 export function RecordsPage() {
   const navigate = useNavigate();
   const [now] = useState(() => new Date());
@@ -28,6 +86,7 @@ export function RecordsPage() {
 
   const calendar = useQuery({ queryKey: ['calendar', yearMonth], queryFn: () => recordApi.calendar(yearMonth) });
   const day = useQuery({ queryKey: ['records', selected], queryFn: () => recordApi.byDate(selected) });
+  const sheet = useSheetDrag();
 
   const move = (delta: number) => {
     const d = new Date(year, month - 1 + delta, 1);
@@ -73,9 +132,28 @@ export function RecordsPage() {
       </div>
       <p className="legend"><span><i />마음 기록</span><span><i className="hollow" />패치만 보낸 날</span></p>
 
-      <section className="day-sheet" aria-label="그날 기록">
-        <div className="handle" />
-        <h3>{dayTitle(selected)}</h3>
+      <section
+        className={`day-sheet${sheet.expanded ? ' expanded' : ''}${sheet.dragging ? ' dragging' : ''}`}
+        style={sheet.style}
+        aria-label="그날 기록"
+      >
+        <div
+          className="sheet-grab"
+          role="button"
+          tabIndex={0}
+          aria-expanded={sheet.expanded}
+          aria-label={sheet.expanded ? '그날 기록 접기' : '그날 기록 크게 보기'}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              sheet.setExpanded(!sheet.expanded);
+            }
+          }}
+          {...sheet.grabHandlers}
+        >
+          <div className="handle" />
+          <h3>{dayTitle(selected)}</h3>
+        </div>
         {day.isPending && <Loading />}
         {day.isError && <ErrorText text={parseApiError(day.error).message} />}
         {day.data && (
@@ -179,6 +257,7 @@ export function RecordDetailPage() {
 export function BlanketPage() {
   const navigate = useNavigate();
   const [blanketId, setBlanketId] = useState<number | undefined>();
+  const [openSlot, setOpenSlot] = useState<BlanketSlot | null>(null);
   const blanket = useQuery({ queryKey: ['blanket', blanketId ?? 'current'], queryFn: () => blanketApi.get(blanketId) });
 
   if (blanket.isPending) return (<><Header title="담요" /><Loading /></>);
@@ -198,10 +277,20 @@ export function BlanketPage() {
       </div>
 
       <div className="blanket" aria-label={`담요 ${filled}칸 채워짐`}>
-        {b.slots.map((s) => (
-          // BLK-VIEW-002 패치 카드 조회(413)는 P1 — 지금은 칸 색만 표시
-          <div key={s.index} className={`tile ${s.filled ? 'filled' : ''}`} style={s.filled ? ({ '--knit': emotionColor(s.emotion) } as CSSProperties) : undefined} />
-        ))}
+        {b.slots.map((s) =>
+          s.filled ? (
+            // BLK-VIEW-002 채워진 칸을 누르면 그 칸의 패치 카드(413)
+            <button
+              key={s.index}
+              className="tile filled"
+              style={{ '--knit': emotionColor(s.emotion) } as CSSProperties}
+              aria-label={`${s.index + 1}번째 칸 패치 보기`}
+              onClick={() => setOpenSlot(s)}
+            />
+          ) : (
+            <div key={s.index} className="tile" />
+          ),
+        )}
       </div>
 
       <div className="progress-row">
@@ -229,6 +318,51 @@ export function BlanketPage() {
           {b.hasPrev && <button className="btn secondary" onClick={() => setBlanketId(b.blanketId - 1)}>지난 담요 보기</button>}
         </>
       ) : null}
+
+      {openSlot && <BlanketPatchModal slot={openSlot} onClose={() => setOpenSlot(null)} />}
     </>
+  );
+}
+
+const receivedLabel = (iso: string) => {
+  const d = new Date(iso);
+  return `${d.getMonth() + 1}월 ${d.getDate()}일 ${toTime(iso)}에 받았어요`;
+};
+
+/** 413/414 담요 칸 패치 카드 — 받은 패치 글과 그날 기록으로 가는 길 */
+function BlanketPatchModal({ slot, onClose }: { slot: BlanketSlot; onClose: () => void }) {
+  const navigate = useNavigate();
+  const recordId = slot.recordId ?? null;
+  // 기록이 지워졌는지(414) 확인. 지운 직후에도 맞도록 열 때마다 다시 확인한다
+  const record = useQuery({
+    queryKey: ['record', String(recordId)],
+    queryFn: () => recordApi.detail(recordId!),
+    enabled: recordId !== null,
+    retry: false,
+    refetchOnMount: 'always',
+  });
+  const deleted = record.isError && isAxiosError(record.error) && record.error.response?.status === 404;
+
+  return (
+    <div className="dim" role="dialog" aria-modal="true" aria-label={`${slot.index + 1}번째 칸 패치`} onClick={onClose}>
+      <div className="slot-card" onClick={(e) => e.stopPropagation()}>
+        <div className="slot-card-top">
+          <span className="slot-no">{slot.index + 1}번째 칸</span>
+          <Thread className="wide" />
+          <p className="message">{slot.message ?? '따뜻한 패치가 담겨 있어요'}</p>
+          <p className="from">같은 마음을 지나온 누군가</p>
+        </div>
+        <div className="slot-card-bottom">
+          {slot.receivedAt && <p className="received">{receivedLabel(slot.receivedAt)}</p>}
+          {recordId !== null &&
+            (deleted ? (
+              <button className="btn" disabled>이날의 기록은 지워졌어요</button>
+            ) : (
+              <button className="btn secondary" onClick={() => navigate(`/records/${recordId}`)}>이날의 기록 보기</button>
+            ))}
+          <button className="btn soft" onClick={onClose}>닫기</button>
+        </div>
+      </div>
+    </div>
   );
 }

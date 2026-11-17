@@ -1,0 +1,17 @@
+<svg width="200" height="180" viewBox="0 0 200 180" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- 패치를 보냈어요(308): Figma 309 달 스타일 — 납작한 살구색 초승달 + 흩어진 점 -->
+  <defs>
+    <mask id="pm-crescent">
+      <rect width="200" height="180" fill="#fff"/>
+      <circle cx="124" cy="74" r="44" fill="#000"/>
+    </mask>
+  </defs>
+  <circle cx="96" cy="98" r="52" fill="#E5C5AF" mask="url(#pm-crescent)"/>
+
+  <circle cx="44" cy="44" r="4" fill="#F1E4DA"/>
+  <circle cx="38" cy="82" r="2.4" fill="#D9C6B3"/>
+  <circle cx="152" cy="50" r="3.2" fill="#D8BFAE"/>
+  <circle cx="166" cy="96" r="2.2" fill="#E6D6C8"/>
+  <circle cx="60" cy="158" r="2.8" fill="#EADCCD"/>
+  <circle cx="148" cy="146" r="2" fill="#D9C6B3"/>
+</svg>

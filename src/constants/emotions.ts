@@ -39,9 +39,9 @@ export function emotionColor(code: EmotionCode | string | null): string {
   return emo ? `var(--color-emo-${emo})` : 'transparent';
 }
 
-/** ITR-MAP-001 / Figma 208: 인원 구간 문구 */
-export function countLabel(count: number): string {
-  if (count < 5) return '몇몇 사람';
+/** ITR-MAP-001 / Figma 208: 인원 구간 문구. 5명 미만은 인원을 보여 주지 않는다 (null) */
+export function countLabel(count: number): string | null {
+  if (count < 5) return null;
   if (count >= 50) return '50명 이상';
   return `${count}명`;
 }
