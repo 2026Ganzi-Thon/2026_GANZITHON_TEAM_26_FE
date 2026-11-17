@@ -1,14 +1,14 @@
 /**
  * MSW 목업 핸들러
  * - featureHandlers: 서버에 아직 없는 API (VITE_USE_MOCK=true면 항상 켜짐)
- *     온기 지도, 패치 받기·신고·보내기, 담요
+ *     온기 지도, 패치 받기·신고, 담요 — URL은 백엔드가 알려 준 실제 주소, 형식은 목업 기준
  * - serverHandlers: 서버에 이미 있는 API의 목업 (VITE_MOCK_AUTH=true일 때만 — 백엔드 없이 시연용)
- *     인증, 마음 기록(moods), 사연 검사, 캘린더, 보내기 가능 확인(cheers)
+ *     인증, 마음 기록(moods), 사연 검사, 캘린더, 보내기 질문·패치 보내기(cheers)
  * 실제 API가 나오면 featureHandlers에서 해당 핸들러를 지우면 그 요청은 진짜 서버로 간다.
  */
 import { http, HttpResponse, delay } from 'msw';
 import { EMOTIONS, MAX_EMOTIONS, PATCH_MAX_LENGTH, STORY_MAX_LENGTH } from '../constants/emotions';
-import type { CreateRecordRequest, EmotionCode, ReceivePatchesRequest, SendPatchRequest, SendPatchResult } from '../types/api';
+import type { CreateRecordRequest, EmotionCode, ReceivePatchesRequest, SendPatchRequest } from '../types/api';
 import {
   dateStr,
   db,
@@ -33,7 +33,7 @@ const QUESTIONS = [
 /* ───────────── 서버에 아직 없는 API ───────────── */
 export const featureHandlers = [
   /* ITR-MAP-001 온기 지도 */
-  http.get('/api/v1/map', async ({ request }) => {
+  http.get('/api/v1/interactions/map', async ({ request }) => {
     const params = new URL(request.url).searchParams;
     const emotions = (params.get('emotions') ?? '').split(',').filter(Boolean) as EmotionCode[];
     if (!emotions.length) return fail(400, 'NO_RECORD_TODAY', '오늘 기록이 없어요');
@@ -48,7 +48,7 @@ export const featureHandlers = [
   }),
 
   /* BLK-RCV-001/002 패치 받기 */
-  http.post('/api/v1/patches/receive', async ({ request }) => {
+  http.post('/api/v1/cheers/receive', async ({ request }) => {
     const body = ((await request.json().catch(() => ({}))) ?? {}) as ReceivePatchesRequest;
     const emotions = body.emotions ?? [];
     if (!emotions.length) return fail(400, 'NO_RECORD_TODAY', '먼저 마음을 골라 주세요');
@@ -69,8 +69,8 @@ export const featureHandlers = [
   }),
 
   /* BLK-RPT-001 신고 → 같은 자리 교체 */
-  http.post('/api/v1/patches/:id/report', ({ params }) => {
-    const info = db.delivered.get(Number(params.id));
+  http.post('/api/v1/cheers/:cheerId/report', ({ params }) => {
+    const info = db.delivered.get(Number(params.cheerId));
     if (!info) return fail(404, 'PATCH_NOT_FOUND', '존재하지 않는 패치예요');
     if (info.reported) return fail(409, 'ALREADY_REPORTED', '이미 신고했어요');
     info.reported = true;
@@ -78,28 +78,9 @@ export const featureHandlers = [
     if (queued) db.delivered.set(queued.id, { emotion: info.emotion, reported: false });
     const replaced = toReceived(info.emotion, queued, false);
     // 담요 칸에 남은 신고된 글도 교체한 글로 바꾼다
-    const slot = db.blankets.flatMap((b) => b.slots).find((x) => x?.patchMessageId === Number(params.id));
+    const slot = db.blankets.flatMap((b) => b.slots).find((x) => x?.patchMessageId === Number(params.cheerId));
     if (slot) { slot.message = replaced.message; slot.patchMessageId = replaced.patchMessageId; }
     return ok({ replaced });
-  }),
-
-  /* BLK-SEND-002 검사·발송 */
-  http.post('/api/v1/patches', async ({ request }) => {
-    const body = (await request.json()) as SendPatchRequest;
-    if (!body.targetEmotion) return fail(400, 'TARGET_REQUIRED', '받을 마음을 골라 주세요');
-    if (!body.content || body.content.length > PATCH_MAX_LENGTH) return fail(400, 'CONTENT_LENGTH', '1~50자로 써 주세요');
-    if (db.sendable <= 0) return fail(429, 'SEND_QUOTA_EXHAUSTED', '오늘 보낼 수 있는 패치를 모두 보냈어요');
-    await delay(1200); // Figma 304_AI검수중
-    let result: SendPatchResult;
-    if (mockDetectCrisis(body.content)) result = { result: 'CRISIS' };
-    else if (mockIsInappropriate(body.content)) result = { result: 'NEEDS_REVISION', reason: '연락처나 링크는 보낼 수 없어요' };
-    else {
-      enqueue(body.targetEmotion, body.content);
-      db.sendable -= 1;
-      db.sentByDate[todayStr()] = (db.sentByDate[todayStr()] ?? 0) + 1;
-      result = { result: 'SENT' };
-    }
-    return ok(result);
   }),
 
   /* BLK-VIEW-001 담요 */
@@ -171,7 +152,6 @@ export const serverHandlers = [
       patches: body.emotions.map((emotion) => ({ emotion, status: 'NOT_RECEIVED' as const })),
     };
     db.records.push(record);
-    if (body.story) db.sendable += 1;
     await delay(300);
     return ok({ recordId: record.id, emotions: record.emotions, recordedAt: record.recordedAt, todayCount: todayIndex });
   }),
@@ -198,13 +178,26 @@ export const serverHandlers = [
     return ok(null);
   }),
 
-  /* 보내기 가능 확인 — 패치가 부족한 마음부터 */
+  /* 보내기 질문 — 패치가 부족한 마음부터 (발송 한도 없음) */
   http.get('/api/v1/cheers/availability', () =>
     ok({
-      sendable: db.sendable > 0,
       questions: [...EMOTIONS]
         .sort((a, b) => db.queue.filter((q) => q.emotion === a.code).length - db.queue.filter((q) => q.emotion === b.code).length)
         .map((e) => ({ emotion: e.code, questions: QUESTIONS })),
     }),
   ),
+
+  /* BLK-SEND-002 검수·발송 — 위기면 200 crisisDetected: true, 검수 거절은 400_CHEER_* */
+  http.post('/api/v1/cheers', async ({ request }) => {
+    const body = (await request.json()) as SendPatchRequest;
+    if (!body.targetEmotion || !body.content || body.content.length > PATCH_MAX_LENGTH) {
+      return fail(400, '400_INVALID_INPUT', '입력값이 올바르지 않습니다');
+    }
+    await delay(1200); // Figma 304_AI검수중
+    if (mockDetectCrisis(body.content)) return ok({ crisisDetected: true });
+    if (mockIsInappropriate(body.content)) return fail(400, '400_CHEER_CONTACT_OR_LINK', '연락처나 링크는 보낼 수 없습니다');
+    enqueue(body.targetEmotion, body.content);
+    db.sentByDate[todayStr()] = (db.sentByDate[todayStr()] ?? 0) + 1;
+    return ok({ crisisDetected: false });
+  }),
 ];

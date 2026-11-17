@@ -87,8 +87,13 @@ export interface ServerRecordDetailResponse {
   story?: string;
 }
 export interface ServerCheerAvailabilityResponse {
-  sendable: boolean;
+  /** 발송 한도 폐지로 서버에서 빠질 예정 — 프론트는 쓰지 않음 */
+  sendable?: boolean;
   questions: { emotion: EmotionCode; questions: string[] }[];
+}
+/** POST /api/v1/cheers — 위기 표현이면 거절하지 않고 crisisDetected: true. 검수 거절은 400_CHEER_* */
+export interface ServerCheerSendResponse {
+  crisisDetected: boolean;
 }
 
 /* ───────────── 마음 기록 — 화면용 모양 ───────────── */
@@ -158,11 +163,8 @@ export interface ReceivePatchesResponse {
 export interface ReportPatchResponse {
   replaced: ReceivedPatch;
 }
-/** BLK-SEND-001 (실제 API: /cheers/availability) */
+/** BLK-SEND-001 (실제 API: /cheers/availability) — 발송 한도·쿨타임 없음(회의 결정), 감정별 질문만 */
 export interface SendStatusResponse {
-  canSend: boolean;
-  /** 서버가 아직 주지 않음 — 있을 때만 표시 */
-  sendableCount?: number;
   questions: { emotion: EmotionCode; question: string }[];
 }
 export interface SendPatchRequest {
@@ -170,7 +172,7 @@ export interface SendPatchRequest {
   content: string; // 1~50자
 }
 export type SendPatchResult =
-  | { result: 'SENT'; sendableCount?: number }
+  | { result: 'SENT' }
   | { result: 'NEEDS_REVISION'; reason: string }
   | { result: 'CRISIS' };
 

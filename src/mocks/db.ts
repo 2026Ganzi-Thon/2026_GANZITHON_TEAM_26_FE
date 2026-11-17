@@ -48,7 +48,6 @@ export const db = {
   queue: EMOTIONS.flatMap((e, i) =>
     [0, 1].map((j) => ({ id: nextId++, emotion: e.code, message: SEED_MESSAGES[(i + j) % SEED_MESSAGES.length], fromMe: false })),
   ) as QueuedPatch[],
-  sendable: 5,
   sentByDate: {} as Record<string, number>,
   /** 패치 받기를 이미 한 기록 (재요청 409) */
   receivedRecordIds: new Set<number>(),

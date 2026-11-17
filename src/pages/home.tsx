@@ -3,7 +3,7 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { useRef, useState } from 'react';
 import type { PointerEvent } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { parseApiError } from '../api/errors';
+import { isCrisisDetected, parseApiError } from '../api/errors';
 import { mapApi, patchApi, recordApi } from '../api/patch';
 import ChevronRight from '../assets/icons/chevron-right.svg?react';
 import { ErrorText, Header, Loading, Spacer, Toast } from '../components/Layout';
@@ -31,6 +31,10 @@ export function EmotionPickPage() {
       const state: RecordState = { recordId: res.recordId, emotions, todayCount: res.todayCount };
       reset();
       navigate('/map', { state });
+    },
+    // 서버가 기록 저장 시 위기 표현을 감지하면(400_CRISIS_DETECTED) 에러 문구 대신 위기 안내로
+    onError: (err) => {
+      if (isCrisisDetected(err)) navigate('/help', { state: { next: '/', from: 'record' } });
     },
   });
 
@@ -67,7 +71,7 @@ export function EmotionPickPage() {
         <ChevronRight />
       </button>
       {tooMany && <div className="notice">최대 2개까지 고를 수 있어요</div>}
-      {save.isError && <ErrorText text={parseApiError(save.error).message} />}
+      {save.isError && !isCrisisDetected(save.error) && <ErrorText text={parseApiError(save.error).message} />}
       <Spacer />
       {emotions.length > 0 && <p className="pick-count">{emotions.length}개 골랐어요</p>}
       <button className="btn" disabled={!emotions.length || save.isPending} onClick={() => save.mutate()}>

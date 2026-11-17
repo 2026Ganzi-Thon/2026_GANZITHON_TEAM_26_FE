@@ -1,8 +1,10 @@
 /**
  * 기능 API
- * - 실제 서버(nyam17.site): 마음 기록(moods), 사연 위기 검사, 캘린더, 그날 기록, 상세·삭제, 보내기 가능 확인(cheers)
- * - 아직 서버에 없음 → MSW 목업: 온기 지도, 패치 받기·신고·보내기, 담요
- *   (TODO(백엔드): 나오면 URL만 맞추고 src/mocks/handlers.ts의 해당 핸들러 삭제)
+ * - 실제 서버(nyam17.site): 마음 기록(moods), 사연 위기 검사, 캘린더, 그날 기록, 상세·삭제,
+ *   보내기 질문(cheers/availability), 패치 보내기(cheers)
+ * - 아직 서버에 없음 → MSW 목업: 온기 지도, 패치 받기·신고, 담요
+ *   URL은 백엔드가 알려 준 실제 주소로 맞춰 둠. 요청·응답 형식은 아직 목업 기준
+ *   (TODO(백엔드): Swagger에 올라오면 형식 맞추고 src/mocks/handlers.ts의 해당 핸들러 삭제)
  * 서버 응답은 여기서 화면용 모양으로 바꿔서 돌려준다 → 서버 형식이 바뀌어도 화면 코드는 그대로.
  */
 import type {
@@ -22,6 +24,7 @@ import type {
   SendStatusResponse,
   ServerCalendarResponse,
   ServerCheerAvailabilityResponse,
+  ServerCheerSendResponse,
   ServerCreateRecordResponse,
   ServerDayListResponse,
   ServerRecordDetailResponse,
@@ -29,6 +32,7 @@ import type {
   WarmthMapResponse,
 } from '../types/api';
 import { api, unwrap } from './client';
+import { cheerRejectReason } from './errors';
 
 const pad = (n: number) => String(n).padStart(2, '0');
 /** ISO date-time → 'HH:mm' (기기 로컬 시간) */
@@ -83,11 +87,10 @@ export const recordApi = {
 };
 
 export const patchApi = {
-  /** BLK-SEND-001 (실제 API) — 감정마다 질문이 여러 개면 하나를 골라 보여 준다 */
+  /** BLK-SEND-001 (실제 API) — 감정마다 질문이 여러 개면 하나를 골라 보여 준다. 발송 한도 없음 */
   async sendStatus(): Promise<SendStatusResponse> {
     const r = await unwrap(api.get<ApiResponse<ServerCheerAvailabilityResponse>>('/api/v1/cheers/availability'));
     return {
-      canSend: r.sendable,
       questions: (r.questions ?? []).map((q) => ({
         emotion: q.emotion,
         question: q.questions[Math.floor(Math.random() * q.questions.length)] ?? '이 마음일 때 나를 조금 버티게 한 건 뭐였어요?',
@@ -95,23 +98,39 @@ export const patchApi = {
     };
   },
 
-  /* ───────── 목업 (서버에 아직 없음) ───────── */
+  /**
+   * BLK-SEND-002 (실제 API) 검수·발송
+   * - 200 crisisDetected: false → 발송 완료
+   * - 200 crisisDetected: true  → 위기 안내 (서버는 거절하지 않고 조용히 처리)
+   * - 400 400_CHEER_*           → 수정 요청(305), 작성 내용 유지
+   * 그 외 에러(400_INVALID_INPUT 등)는 그대로 던져서 화면이 에러 문구를 보여 준다.
+   */
+  async send(body: SendPatchRequest): Promise<SendPatchResult> {
+    try {
+      const r = await unwrap(api.post<ApiResponse<ServerCheerSendResponse>>('/api/v1/cheers', body));
+      return r.crisisDetected ? { result: 'CRISIS' } : { result: 'SENT' };
+    } catch (err) {
+      const reason = cheerRejectReason(err);
+      if (reason) return { result: 'NEEDS_REVISION', reason };
+      throw err;
+    }
+  },
+
+  /* ───────── 목업 (서버에 아직 없음 — URL만 실제 주소) ───────── */
 
   /** BLK-RCV-001/002 */
   receive: (body: ReceivePatchesRequest) =>
-    unwrap(api.post<ApiResponse<ReceivePatchesResponse>>('/api/v1/patches/receive', body)),
+    unwrap(api.post<ApiResponse<ReceivePatchesResponse>>('/api/v1/cheers/receive', body)),
   /** BLK-RPT-001 */
-  report: (patchMessageId: number) =>
-    unwrap(api.post<ApiResponse<ReportPatchResponse>>(`/api/v1/patches/${patchMessageId}/report`)),
-  /** BLK-SEND-002 */
-  send: (body: SendPatchRequest) => unwrap(api.post<ApiResponse<SendPatchResult>>('/api/v1/patches', body)),
+  report: (cheerId: number) =>
+    unwrap(api.post<ApiResponse<ReportPatchResponse>>(`/api/v1/cheers/${cheerId}/report`)),
 };
 
 export const mapApi = {
-  /** ITR-MAP-001 (목업) — 고른 감정을 함께 보냄 */
+  /** ITR-MAP-001 (목업) — 고른 감정을 함께 보냄. 명세상 1분 폴링 기준(실시간 연결 없음) */
   get: (emotions: EmotionCode[], todayCount?: number) =>
     unwrap(
-      api.get<ApiResponse<WarmthMapResponse>>('/api/v1/map', {
+      api.get<ApiResponse<WarmthMapResponse>>('/api/v1/interactions/map', {
         params: { emotions: emotions.join(','), todayCount },
       }),
     ),

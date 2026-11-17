@@ -1,4 +1,7 @@
-/** 3xx 보내기 — BLK-SEND-001(실제 API) 보내기 가능 확인, BLK-SEND-002(목업) 검사·발송. Figma 301~310 */
+/**
+ * 3xx 보내기 — BLK-SEND-001(실제 API) 감정별 질문, BLK-SEND-002(실제 API) 검수·발송. Figma 301~309
+ * 하루 발송 한도·쿨타임은 없음(회의 결정) → 310_보내기제한 화면 사용 안 함
+ */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -38,20 +41,7 @@ export function SendPage() {
   if (status.isPending) return (<><Header title="패치 선물하기" /><Loading /></>);
   if (status.isError) return (<><Header title="패치 선물하기" /><ErrorText text={parseApiError(status.error).message} /></>);
 
-  const { canSend, sendableCount, questions } = status.data;
-
-  if (!canSend) {
-    // 310_보내기제한 / 오늘 개수 소진
-    return (
-      <>
-        <Header title="패치 선물하기" />
-        <h2 className="page-title">오늘은 여기까지 보낼 수 있어요</h2>
-        <p className="page-sub">사연을 남기면 1개 더 보낼 수 있어요</p>
-        <Spacer />
-        <button className="btn" onClick={() => navigate('/')}>마음 고르러 가기</button>
-      </>
-    );
-  }
+  const { questions } = status.data;
 
   if (done) {
     // 308_발송완료
@@ -79,9 +69,7 @@ export function SendPage() {
     <>
       <Header title="패치 선물하기" />
       <h2 className="page-title">누구에게 보낼까요?</h2>
-      <p className="page-sub sm">
-        패치가 부족한 마음부터 보여요{sendableCount !== undefined ? ` · 오늘 ${sendableCount}개 보낼 수 있어요` : ''}
-      </p>
+      <p className="page-sub sm">패치가 부족한 마음부터 보여요</p>
 
       <div className="chip-scroll" role="listbox" aria-label="받을 마음">
         {questions.map((q) => (
