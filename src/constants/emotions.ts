@@ -3,7 +3,10 @@ import type { EmotionCode } from '../types/api';
 /**
  * 감정 카드 목록 — Figma 201_H01_마음고르기 기준 11개.
  * code는 백엔드 enum(MoodRecordCreateRequest.emotions)과 동일.
- * TODO(팀): emo 색(1~6) 매핑은 미확정. 지금은 임시로 순서대로 돌려 씀.
+ *
+ * 담요 칸 색(emo 1~6)은 비슷한 마음끼리 같은 색으로 묶는다 (FE 결정, 2026-11-17):
+ *   emo-3 기운이 없음 / emo-6 불안·막막 / emo-2 외로움·슬픔
+ *   emo-4 나·사람 부담 / emo-5 화 / emo-1 잘 모르겠어요
  */
 export interface Emotion {
   code: EmotionCode;
@@ -12,18 +15,21 @@ export interface Emotion {
 }
 
 export const EMOTIONS: Emotion[] = [
-  { code: 'UNMOTIVATED', label: '아무것도 하기 싫어요', emo: 1 },
-  { code: 'HOPELESS_FUTURE', label: '미래가 막막해요', emo: 2 },
-  { code: 'ANXIETY', label: '불안해서 잠이 안 와요', emo: 3 },
-  { code: 'LONELY', label: '혼자인 것 같아요', emo: 4 },
-  { code: 'EXHAUSTED', label: '지쳐서 아무 생각이 없어요', emo: 5 },
-  { code: 'INADEQUATE', label: '내가 부족한 것 같아요', emo: 6 },
-  { code: 'NOWHERE_TO_VENT', label: '화를 풀 곳이 없어요', emo: 1 },
+  { code: 'UNMOTIVATED', label: '아무것도 하기 싫어요', emo: 3 },
+  { code: 'HOPELESS_FUTURE', label: '미래가 막막해요', emo: 6 },
+  { code: 'ANXIETY', label: '불안해서 잠이 안 와요', emo: 6 },
+  { code: 'LONELY', label: '혼자인 것 같아요', emo: 2 },
+  { code: 'EXHAUSTED', label: '지쳐서 아무 생각이 없어요', emo: 3 },
+  { code: 'INADEQUATE', label: '내가 부족한 것 같아요', emo: 4 },
+  { code: 'NOWHERE_TO_VENT', label: '화를 풀 곳이 없어요', emo: 5 },
   { code: 'TEARFUL', label: '괜히 눈물이 나요', emo: 2 },
   { code: 'RESTLESS', label: '쉬고 싶은데 못 쉬어요', emo: 3 },
   { code: 'OVERWHELMED', label: '사람들이 버거워요', emo: 4 },
-  { code: 'UNSURE', label: '잘 모르겠어요', emo: 6 },
+  { code: 'UNSURE', label: '잘 모르겠어요', emo: 1 },
 ];
+
+/** 칸에 감정 정보가 없을 때(BE 담요 응답에 emotion 미포함) 채워진 칸이 비어 보이지 않게 쓰는 색 */
+const FALLBACK_EMO = 3;
 
 export const MAX_EMOTIONS = 2;
 export const STORY_MAX_LENGTH = 300;
@@ -36,7 +42,7 @@ export function emotionLabel(code: EmotionCode | string): string {
 
 export function emotionColor(code: EmotionCode | string | null): string {
   const emo = EMOTIONS.find((e) => e.code === code)?.emo;
-  return emo ? `var(--color-emo-${emo})` : 'transparent';
+  return `var(--color-emo-${emo ?? FALLBACK_EMO})`;
 }
 
 /** ITR-MAP-001 / Figma 208: 인원 구간 문구. 5명 미만은 인원을 보여 주지 않는다 (null) */
