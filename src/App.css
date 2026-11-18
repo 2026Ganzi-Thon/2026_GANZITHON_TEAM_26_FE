@@ -1282,6 +1282,21 @@ button.tile:active {
 .sent-done .page-title {
   margin-top: 16px;
 }
+/* 309 쿨타임 · 310 보내기제한 */
+.limit-illust {
+  width: 200px;
+  max-width: 60%;
+  height: auto;
+}
+.limit-pill {
+  margin: 20px 0 0;
+  padding: 12px 20px;
+  min-width: 60%;
+  border-radius: var(--radius-md);
+  background: var(--color-main);
+  font: var(--text-m-bold);
+  color: var(--color-bk);
+}
 @keyframes moon-float {
   0%,
   100% {
