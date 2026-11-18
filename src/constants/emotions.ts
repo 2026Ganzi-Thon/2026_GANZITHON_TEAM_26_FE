@@ -28,9 +28,6 @@ export const EMOTIONS: Emotion[] = [
   { code: 'UNSURE', label: '잘 모르겠어요', emo: 1 },
 ];
 
-/** 칸에 감정 정보가 없을 때(BE 담요 응답에 emotion 미포함) 채워진 칸이 비어 보이지 않게 쓰는 색 */
-const FALLBACK_EMO = 3;
-
 export const MAX_EMOTIONS = 2;
 export const STORY_MAX_LENGTH = 300;
 export const PATCH_MAX_LENGTH = 50;
@@ -40,9 +37,10 @@ export function emotionLabel(code: EmotionCode | string): string {
   return EMOTIONS.find((e) => e.code === code)?.label ?? code;
 }
 
+/** 감정이 없으면 'transparent' — 담요 칸 기본 색은 records.tsx(KNIT_FALLBACK)에서 정한다 */
 export function emotionColor(code: EmotionCode | string | null): string {
   const emo = EMOTIONS.find((e) => e.code === code)?.emo;
-  return `var(--color-emo-${emo ?? FALLBACK_EMO})`;
+  return emo ? `var(--color-emo-${emo})` : 'transparent';
 }
 
 /** ITR-MAP-001 / Figma 208: 인원 구간 문구. 5명 미만은 인원을 보여 주지 않는다 (null) */
