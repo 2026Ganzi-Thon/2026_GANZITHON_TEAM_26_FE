@@ -4,8 +4,8 @@
 
 - 스택: Vite · React 19 · TypeScript · React Router · TanStack Query · axios · MSW
 - 백엔드: `https://nyam17.site` (Swagger "PATCH API")
-  - **실제 서버 연결**: 회원가입·이메일 인증·로그인·로그아웃, 마음 기록 저장, 사연 위기 검사, 캘린더, 그날 기록, 기록 상세·삭제, 보내기 가능 확인
-  - **목업(MSW)**: 온기 지도, 패치 받기·신고·보내기, 담요 — 서버에 아직 없는 API
+  - **실제 서버 연결**: 회원가입·이메일 인증·로그인·로그아웃, 마음 기록 저장, 사연 위기 검사, 캘린더, 그날 기록, 기록 상세·삭제, 보내기 질문, 패치 보내기, 온기 지도, 패치 받기·신고, 담요·담요 칸
+  - **목업(MSW)**: 지금은 없음 (`VITE_MOCK_AUTH=true`면 백엔드 없이 전부 목업으로 시연)
 
 ## 디자인 기준
 
@@ -54,12 +54,12 @@ src/
 | /signup | 회원가입·이메일 인증 | USR-AUTH-001/002 | 실제 |
 | / | 마음 고르기 | CRD-WRITE-001/003 | 실제 |
 | /story | 사연 입력·위기 검사 | CRD-WRITE-002, ALRT-DETECT-001 | 실제 |
-| /map | 온기 지도 | ITR-MAP-001 | 목업 (30초 폴링) |
-| /receive | 패치 받기·신고 | BLK-RCV-001/002, BLK-RPT-001 | 목업 |
-| /send | 패치 선물하기 | BLK-SEND-001(실제) / 002(목업) | 일부 |
+| /map | 온기 지도 | ITR-MAP-001 | 실제 `/interactions/map` (30초 폴링, 명세는 1분) |
+| /receive | 패치 받기·신고 | BLK-RCV-001/002, BLK-RPT-001 | 실제 `/cheers/receive`, `/cheers/{cheerId}/report` |
+| /send | 패치 선물하기 | BLK-SEND-001/002 | 실제 `/cheers` |
 | /records | 캘린더 + 그날 기록(시트) | CRD-VIEW-001/002 | 실제 |
 | /records/:recordId | 기록 상세·삭제 | CRD-VIEW-003, CRD-DEL-001 | 실제 |
-| /blanket | 담요 | BLK-VIEW-001 | 목업 |
+| /blanket | 담요 · 칸 패치 카드 | BLK-VIEW-001/002 | 실제 `/blankets`, `/blankets/{id}/slots/{slotIndex}` |
 | /help | 위기 안내 (로그인 불필요) | ALRT-HELP-001/002 | 없음 |
 | /my | 마이·로그아웃 | USR-USER-* | 실제(로그아웃) |
 
@@ -68,18 +68,20 @@ src/
 1. `src/api/patch.ts`의 URL을 실제 명세에 맞춥니다.
 2. `src/types/api.ts`의 타입을 실제 응답에 맞춥니다.
 3. `src/mocks/handlers.ts`에서 해당 핸들러를 지웁니다. 지운 요청은 자동으로 실제 서버로 갑니다.
-4. 백엔드 에러 `code` 목록을 받으면 `src/api/errors.ts`의 `MESSAGES`를 채웁니다.
+4. 에러 `code`별 화면 문구는 `src/api/errors.ts`의 `MESSAGES`(패치 검수 거절은 `CHEER_REJECT_MESSAGES`)에서 관리합니다.
 
 ## 목업에서 시험해 볼 것
 
 - 사연에 "죽고 싶" 같은 표현 → 위기 안내 화면 → 돌아가기 시 온기 지도로 이동
-- 패치에 링크나 전화번호 → "수정 요청" 안내 (작성 내용 유지)
+- 패치에 링크나 전화번호 → "수정 요청" 안내 (작성 내용 유지) — `VITE_MOCK_AUTH=true`일 때. 실제 서버는 AI 검수 결과로 `400_CHEER_*` 6종을 돌려줘요
 - 하루 4번째 기록부터 → 기본 위로 + 담요 미적립 안내
 
 ## 미확정 사항 (코드에 `TODO(팀)` / `TODO(백엔드)`로 표시)
 
 - 테마: 지금은 Figma 라이트 테마. 다크로 정해지면 `styles/tokens.css`의 `[data-theme='dark']`를 채우면 됩니다.
 - 감정 코드와 담요 색 매핑: `constants/emotions.ts`
-- 보내기 한도와 쿨타임 규칙, 부적절 판정 응답 형식(200/400)
-- 온기 지도 실시간 방식 (지금은 폴링)
-- 오늘 받은 패치 재조회 방법 (새로고침 시 409)
+- 패치 검수 거절 6종·에러 코드별 화면 문구 최종 확정: `api/errors.ts`
+- 온기 지도 갱신 간격: Figma 30초 / 명세 1분 (실시간 연결은 없음)
+- 오늘 받은 패치 재조회 방법 (새로고침 시 409) — 전용 API 없음
+
+패치는 5분에 한 번 보낼 수 있어요(쿨타임). 하루 발송 한도는 없어요. 쿨타임 중이면 보내기 제한 화면(310)이 나와요.

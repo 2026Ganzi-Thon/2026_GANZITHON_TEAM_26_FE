@@ -1,34 +1,43 @@
 /**
  * 기능 API
- * - 실제 서버(nyam17.site): 마음 기록(moods), 사연 위기 검사, 캘린더, 그날 기록, 상세·삭제, 보내기 가능 확인(cheers)
- * - 아직 서버에 없음 → MSW 목업: 온기 지도, 패치 받기·신고·보내기, 담요
- *   (TODO(백엔드): 나오면 URL만 맞추고 src/mocks/handlers.ts의 해당 핸들러 삭제)
+ * - 실제 서버(nyam17.site): 마음 기록(moods), 사연 위기 검사, 캘린더, 그날 기록, 상세·삭제,
+ *   보내기 질문(cheers/availability), 패치 보내기(cheers), 온기 지도, 패치 받기, 담요·담요 칸
+ *   패치 신고(cheers/{cheerId}/report)
  * 서버 응답은 여기서 화면용 모양으로 바꿔서 돌려준다 → 서버 형식이 바뀌어도 화면 코드는 그대로.
  */
 import type {
   ApiResponse,
   BlanketResponse,
+  BlanketSlotDetail,
   CalendarDay,
   CreateRecordRequest,
   CreateRecordResult,
   DayRecordsResponse,
   EmotionCode,
-  ReceivePatchesRequest,
   ReceivePatchesResponse,
+  ReceivedPatch,
   RecordDetail,
   ReportPatchResponse,
   SendPatchRequest,
   SendPatchResult,
   SendStatusResponse,
+  ServerBlanketResponse,
+  ServerBlanketSlotResponse,
   ServerCalendarResponse,
   ServerCheerAvailabilityResponse,
+  ServerCheerSendResponse,
   ServerCreateRecordResponse,
   ServerDayListResponse,
+  ServerMapResponse,
+  ServerReceiveResponse,
+  ServerReceivedCheer,
+  ServerReportResponse,
   ServerRecordDetailResponse,
   ServerStoryCheckResponse,
   WarmthMapResponse,
 } from '../types/api';
 import { api, unwrap } from './client';
+import { cheerRejectReason } from './errors';
 
 const pad = (n: number) => String(n).padStart(2, '0');
 /** ISO date-time → 'HH:mm' (기기 로컬 시간) */
@@ -82,12 +91,27 @@ export const recordApi = {
   remove: (recordId: number) => unwrap(api.delete<ApiResponse<null>>(`/api/v1/moods/${recordId}`)),
 };
 
+/** 서버의 받은 패치 → 화면용 (패치 받기·신고 공통) */
+const toReceivedPatch = (p: ServerReceivedCheer): ReceivedPatch => ({
+  patchMessageId: p.isDefault ? null : p.cheerId,
+  emotion: p.emotion,
+  message: p.message,
+  isDefault: p.isDefault,
+  slotIndex: p.slotIndex ?? null,
+  blanketCompleted: p.blanketCompleted ?? false,
+});
+
 export const patchApi = {
-  /** BLK-SEND-001 (실제 API) — 감정마다 질문이 여러 개면 하나를 골라 보여 준다 */
+  /**
+   * BLK-SEND-001 (실제 API) — 보낼 수 있는지(5분 쿨타임·신고 누적 제한)와 감정별 질문.
+   * 감정마다 질문이 여러 개면 하나를 골라 보여 준다.
+   */
   async sendStatus(): Promise<SendStatusResponse> {
     const r = await unwrap(api.get<ApiResponse<ServerCheerAvailabilityResponse>>('/api/v1/cheers/availability'));
     return {
-      canSend: r.sendable,
+      canSend: r.sendable ?? true,
+      cooldownUntil: r.cooldownUntil ?? null,
+      restrictedUntil: r.restrictedUntil ?? null,
       questions: (r.questions ?? []).map((q) => ({
         emotion: q.emotion,
         question: q.questions[Math.floor(Math.random() * q.questions.length)] ?? '이 마음일 때 나를 조금 버티게 한 건 뭐였어요?',
@@ -95,30 +119,89 @@ export const patchApi = {
     };
   },
 
-  /* ───────── 목업 (서버에 아직 없음) ───────── */
+  /**
+   * BLK-SEND-002 (실제 API) 검수·발송
+   * - 200 crisisDetected: false → 발송 완료
+   * - 200 crisisDetected: true  → 위기 안내 (서버는 거절하지 않고 조용히 처리)
+   * - 400 400_CHEER_*           → 수정 요청(305), 작성 내용 유지
+   * 그 외 에러(400_INVALID_INPUT 등)는 그대로 던져서 화면이 에러 문구를 보여 준다.
+   */
+  async send(body: SendPatchRequest): Promise<SendPatchResult> {
+    try {
+      const r = await unwrap(api.post<ApiResponse<ServerCheerSendResponse>>('/api/v1/cheers', body));
+      return r.crisisDetected ? { result: 'CRISIS' } : { result: 'SENT' };
+    } catch (err) {
+      const reason = cheerRejectReason(err);
+      if (reason) return { result: 'NEEDS_REVISION', reason };
+      throw err;
+    }
+  },
 
-  /** BLK-RCV-001/002 */
-  receive: (body: ReceivePatchesRequest) =>
-    unwrap(api.post<ApiResponse<ReceivePatchesResponse>>('/api/v1/patches/receive', body)),
-  /** BLK-RPT-001 */
-  report: (patchMessageId: number) =>
-    unwrap(api.post<ApiResponse<ReportPatchResponse>>(`/api/v1/patches/${patchMessageId}/report`)),
-  /** BLK-SEND-002 */
-  send: (body: SendPatchRequest) => unwrap(api.post<ApiResponse<SendPatchResult>>('/api/v1/patches', body)),
+  /** BLK-RCV-001/002 (실제 API) — 요청 본문 없음. 서버가 가장 최근 기록 기준으로 패치를 준다. */
+  async receive(): Promise<ReceivePatchesResponse> {
+    const r = await unwrap(api.post<ApiResponse<ServerReceiveResponse>>('/api/v1/cheers/receive'));
+    return { patches: (r.patches ?? []).map(toReceivedPatch) };
+  },
+
+  /**
+   * BLK-RPT-001 (실제 API) — 요청 본문 없음(신고 사유는 받지 않음).
+   * 신고한 패치는 숨김 처리되고, 서버가 같은 자리를 다른 패치(또는 기본 메시지)로 바꿔서 돌려준다.
+   * 에러: 403 본인이 받지 않은 패치 / 404 없는 패치 / 409_CHEER_ALREADY_REPORTED 이미 신고함
+   */
+  async report(cheerId: number): Promise<ReportPatchResponse> {
+    const r = await unwrap(api.post<ApiResponse<ServerReportResponse>>(`/api/v1/cheers/${cheerId}/report`));
+    return { replaced: toReceivedPatch(r.replaced) };
+  },
+};
+
+const MAP_MODE: Record<ServerMapResponse['status'], WarmthMapResponse['mode']> = {
+  ACTIVE: 'NOW',
+  QUIET: 'QUIET_7D',
+  FIRST_LIGHT: 'FIRST_LIGHT',
 };
 
 export const mapApi = {
-  /** ITR-MAP-001 (목업) — 고른 감정을 함께 보냄 */
-  get: (emotions: EmotionCode[], todayCount?: number) =>
-    unwrap(
-      api.get<ApiResponse<WarmthMapResponse>>('/api/v1/map', {
-        params: { emotions: emotions.join(','), todayCount },
-      }),
-    ),
+  /**
+   * ITR-MAP-001 (실제 API) — 서버가 가장 최근 기록의 감정별 인원을 준다. 30초 폴링(실시간 연결 없음)
+   * 감정을 2개 골랐으면 두 인원 중 큰 값을 보여 준다 (같은 사람이 두 번 세어지지 않도록 합치지 않음)
+   * 내 감정이 응답에 없으면 0 — 다른 마음인 사람 수를 '같은 마음'처럼 보여 주지 않는다
+   */
+  async get(emotions: EmotionCode[]): Promise<WarmthMapResponse> {
+    const r = await unwrap(api.get<ApiResponse<ServerMapResponse>>('/api/v1/interactions/map'));
+    const list = r.emotions ?? [];
+    const mine = list.filter((e) => emotions.includes(e.emotion));
+    const count = Math.max(0, ...mine.map((e) => e.count));
+    const mode = MAP_MODE[r.status] ?? 'FIRST_LIGHT';
+    // 지금 같은 마음인 사람이 0명이면 첫 빛 화면
+    return { mode: mode === 'NOW' && count === 0 ? 'FIRST_LIGHT' : mode, count, noBlanketNotice: !!r.blanketNotStackedNotice };
+  },
 };
 
 export const blanketApi = {
-  /** BLK-VIEW-001 (목업) */
-  get: (blanketId?: number) =>
-    unwrap(api.get<ApiResponse<BlanketResponse>>('/api/v1/blankets', { params: blanketId ? { blanketId } : undefined })),
+  /** BLK-VIEW-001 (실제 API) — 칸마다 채워졌는지와 감정(칸 색)이 온다 */
+  async get(blanketId?: number): Promise<BlanketResponse> {
+    const r = await unwrap(
+      api.get<ApiResponse<ServerBlanketResponse>>('/api/v1/blankets', { params: blanketId ? { blanketId } : undefined }),
+    );
+    return {
+      blanketId: r.blanketId,
+      slots: (r.slots ?? []).map((x) => ({ index: x.slotIndex, emotion: x.emotion ?? null, filled: x.filled })),
+      hasPrev: r.hasPrevious,
+      hasNext: r.hasNext,
+    };
+  },
+  /** BLK-VIEW-002 (실제 API) — 칸을 누르면 그 칸의 패치 */
+  async slot(blanketId: number, slotIndex: number): Promise<BlanketSlotDetail> {
+    const r = await unwrap(
+      api.get<ApiResponse<ServerBlanketSlotResponse>>(`/api/v1/blankets/${blanketId}/slots/${slotIndex}`),
+    );
+    return {
+      index: r.slotIndex ?? slotIndex,
+      emotion: r.emotion ?? null,
+      message: r.message,
+      isDefault: r.isDefault,
+      receivedAt: r.receivedAt,
+      hasRecordOnDate: r.hasMoodRecordOnDate,
+    };
+  },
 };

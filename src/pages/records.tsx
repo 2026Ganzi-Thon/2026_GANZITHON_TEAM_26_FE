@@ -1,6 +1,5 @@
 /** 4xx 기록·담요 — 401 캘린더 + 그날 기록 시트, 407 상세, 408 지우기, 409~412 담요 */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { isAxiosError } from 'axios';
 import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { parseApiError } from '../api/errors';
@@ -11,6 +10,9 @@ import { ConfirmModal, ErrorText, Header, Loading, Spacer } from '../components/
 import { BLANKET_SLOTS, emotionColor, emotionLabel } from '../constants/emotions';
 import type { BlanketSlot } from '../types/api';
 import { Thread } from './home';
+
+/** 채워진 칸인데 감정이 없으면(기본 메시지 등) 이 색으로 칠한다 */
+const KNIT_FALLBACK = 'var(--color-main-line)';
 
 const pad = (n: number) => String(n).padStart(2, '0');
 const WEEK = ['일', '월', '화', '수', '목', '금', '토'];
@@ -79,9 +81,12 @@ export function RecordsPage() {
   const navigate = useNavigate();
   const [now] = useState(() => new Date());
   const todayKey = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
-  const [year, setYear] = useState(now.getFullYear());
-  const [month, setMonth] = useState(now.getMonth() + 1);
-  const [selected, setSelected] = useState<string>(todayKey);
+  const location = useLocation();
+  const initialDate = (location.state as { date?: string } | null)?.date;
+  const [year, setYear] = useState(() => (initialDate ? Number(initialDate.slice(0, 4)) : now.getFullYear()));
+  const [month, setMonth] = useState(() => (initialDate ? Number(initialDate.slice(5, 7)) : now.getMonth() + 1));
+  // 담요 칸 카드에서 '이날의 기록 보기'로 오면 그 날짜를 연다
+  const [selected, setSelected] = useState<string>(initialDate ?? todayKey);
   const yearMonth = `${year}-${pad(month)}`;
 
   const calendar = useQuery({ queryKey: ['calendar', yearMonth], queryFn: () => recordApi.calendar(yearMonth) });
@@ -283,7 +288,7 @@ export function BlanketPage() {
             <button
               key={s.index}
               className="tile filled"
-              style={{ '--knit': emotionColor(s.emotion) } as CSSProperties}
+              style={{ '--knit': s.emotion ? emotionColor(s.emotion) : KNIT_FALLBACK } as CSSProperties}
               aria-label={`${s.index + 1}번째 칸 패치 보기`}
               onClick={() => setOpenSlot(s)}
             />
@@ -319,7 +324,7 @@ export function BlanketPage() {
         </>
       ) : null}
 
-      {openSlot && <BlanketPatchModal slot={openSlot} onClose={() => setOpenSlot(null)} />}
+      {openSlot && <BlanketPatchModal blanketId={b.blanketId} slot={openSlot} onClose={() => setOpenSlot(null)} />}
     </>
   );
 }
@@ -329,19 +334,22 @@ const receivedLabel = (iso: string) => {
   return `${d.getMonth() + 1}월 ${d.getDate()}일 ${toTime(iso)}에 받았어요`;
 };
 
-/** 413/414 담요 칸 패치 카드 — 받은 패치 글과 그날 기록으로 가는 길 */
-function BlanketPatchModal({ slot, onClose }: { slot: BlanketSlot; onClose: () => void }) {
+/** YYYY-MM-DD (기기 로컬 날짜) */
+const localDate = (iso: string) => {
+  const d = new Date(iso);
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+};
+
+/** 413/414 담요 칸 패치 카드 — 받은 패치 글과 그날 기록으로 가는 길 (GET /blankets/{id}/slots/{index}) */
+function BlanketPatchModal({ blanketId, slot, onClose }: { blanketId: number; slot: BlanketSlot; onClose: () => void }) {
   const navigate = useNavigate();
-  const recordId = slot.recordId ?? null;
-  // 기록이 지워졌는지(414) 확인. 지운 직후에도 맞도록 열 때마다 다시 확인한다
-  const record = useQuery({
-    queryKey: ['record', String(recordId)],
-    queryFn: () => recordApi.detail(recordId!),
-    enabled: recordId !== null,
-    retry: false,
+  // 기록이 지워졌는지(414)도 이 응답에 들어 있어서, 지운 직후에도 맞도록 열 때마다 다시 불러온다
+  const detail = useQuery({
+    queryKey: ['blanket-slot', blanketId, slot.index],
+    queryFn: () => blanketApi.slot(blanketId, slot.index),
     refetchOnMount: 'always',
   });
-  const deleted = record.isError && isAxiosError(record.error) && record.error.response?.status === 404;
+  const d = detail.data;
 
   return (
     <div className="dim" role="dialog" aria-modal="true" aria-label={`${slot.index + 1}번째 칸 패치`} onClick={onClose}>
@@ -349,16 +357,27 @@ function BlanketPatchModal({ slot, onClose }: { slot: BlanketSlot; onClose: () =
         <div className="slot-card-top">
           <span className="slot-no">{slot.index + 1}번째 칸</span>
           <Thread className="wide" />
-          <p className="message">{slot.message ?? '따뜻한 패치가 담겨 있어요'}</p>
-          <p className="from">같은 마음을 지나온 누군가</p>
+          {detail.isPending ? (
+            <p className="message muted">패치를 펼치는 중…</p>
+          ) : detail.isError ? (
+            <ErrorText text={parseApiError(detail.error).message} />
+          ) : (
+            <p className="message">{d?.message || '따뜻한 패치가 담겨 있어요'}</p>
+          )}
+          <p className="from">
+            {d?.emotion ? `'${emotionLabel(d.emotion)}'에 온 패치` : '같은 마음을 지나온 누군가'}
+            {d?.isDefault ? ' · 기본 위로' : ''}
+          </p>
         </div>
         <div className="slot-card-bottom">
-          {slot.receivedAt && <p className="received">{receivedLabel(slot.receivedAt)}</p>}
-          {recordId !== null &&
-            (deleted ? (
-              <button className="btn" disabled>이날의 기록은 지워졌어요</button>
+          {d?.receivedAt && <p className="received">{receivedLabel(d.receivedAt)}</p>}
+          {d &&
+            (d.hasRecordOnDate ? (
+              <button className="btn secondary" onClick={() => navigate('/records', { state: { date: localDate(d.receivedAt) } })}>
+                이날의 기록 보기
+              </button>
             ) : (
-              <button className="btn secondary" onClick={() => navigate(`/records/${recordId}`)}>이날의 기록 보기</button>
+              <button className="btn" disabled>이날의 기록은 지워졌어요</button>
             ))}
           <button className="btn soft" onClick={onClose}>닫기</button>
         </div>

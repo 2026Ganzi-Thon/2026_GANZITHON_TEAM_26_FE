@@ -3,7 +3,7 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { useRef, useState } from 'react';
 import type { PointerEvent } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { parseApiError } from '../api/errors';
+import { isCrisisDetected, parseApiError } from '../api/errors';
 import { mapApi, patchApi, recordApi } from '../api/patch';
 import ChevronRight from '../assets/icons/chevron-right.svg?react';
 import { ErrorText, Header, Loading, Spacer, Toast } from '../components/Layout';
@@ -31,6 +31,10 @@ export function EmotionPickPage() {
       const state: RecordState = { recordId: res.recordId, emotions, todayCount: res.todayCount };
       reset();
       navigate('/map', { state });
+    },
+    // 서버가 기록 저장 시 위기 표현을 감지하면(400_CRISIS_DETECTED) 에러 문구 대신 위기 안내로
+    onError: (err) => {
+      if (isCrisisDetected(err)) navigate('/help', { state: { next: '/', from: 'record' } });
     },
   });
 
@@ -67,7 +71,7 @@ export function EmotionPickPage() {
         <ChevronRight />
       </button>
       {tooMany && <div className="notice">최대 2개까지 고를 수 있어요</div>}
-      {save.isError && <ErrorText text={parseApiError(save.error).message} />}
+      {save.isError && !isCrisisDetected(save.error) && <ErrorText text={parseApiError(save.error).message} />}
       <Spacer />
       {emotions.length > 0 && <p className="pick-count">{emotions.length}개 골랐어요</p>}
       <button className="btn" disabled={!emotions.length || save.isPending} onClick={() => save.mutate()}>
@@ -148,7 +152,7 @@ export function WarmthMapPage() {
   // TODO(백엔드): 실시간 방식 확정 전까지 30초 폴링 (Figma: 30초 갱신). 끊기면 마지막 값 유지 + 배너(214)
   const map = useQuery({
     queryKey: ['map', rec?.recordId],
-    queryFn: () => mapApi.get(rec?.emotions ?? [], rec?.todayCount),
+    queryFn: () => mapApi.get(rec?.emotions ?? []),
     enabled: !!rec,
     refetchInterval: 30_000,
   });
@@ -287,7 +291,8 @@ export function ReceivePage() {
 
   const receive = useQuery({
     queryKey: ['receive', rec?.recordId],
-    queryFn: () => patchApi.receive({ recordId: rec?.recordId, emotions: rec?.emotions, todayCount: rec?.todayCount }),
+    // 서버가 가장 최근 기록 기준으로 준다 (recordId는 화면 캐시 키로만 씀)
+    queryFn: () => patchApi.receive(),
     enabled: !!rec,
     retry: false,
     staleTime: Infinity,
@@ -297,7 +302,7 @@ export function ReceivePage() {
   const swipe = useSwipe(patches?.length ?? 0, index, goTo);
 
   const report = useMutation({
-    mutationFn: (id: number) => patchApi.report(id),
+    mutationFn: ({ id }: { id: number }) => patchApi.report(id),
     onSuccess: (res) => {
       setReplaced((prev) => ({ ...prev, [index]: res.replaced }));
       setConfirmReport(false);
@@ -343,7 +348,7 @@ export function ReceivePage() {
                   {report.isError && <ErrorText text={parseApiError(report.error).message} />}
                   <div className="btn-row">
                     <button className="btn secondary" onClick={() => setConfirmReport(false)}>취소</button>
-                    <button className="btn danger-soft" disabled={report.isPending} onClick={() => report.mutate(p.patchMessageId!)}>신고</button>
+                    <button className="btn danger-soft" disabled={report.isPending} onClick={() => report.mutate({ id: p.patchMessageId! })}>신고</button>
                   </div>
                 </div>
               )}
