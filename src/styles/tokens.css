@@ -22,7 +22,7 @@
   --color-alert: #c62828;
   --color-alert-bg: #fdecec;
 
-  /* 담요 칸 색 (emo/1~6) — 감정 ↔ 색 매핑은 미확정 (src/constants/emotions.ts) */
+  /* 담요 칸 색 (emo/1~6) — 감정 ↔ 색 매핑은 src/constants/emotions.ts */
   --color-emo-1: #fff8e8;
   --color-emo-2: #e8e3da;
   --color-emo-3: #c9c2b7;
