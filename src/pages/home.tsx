@@ -152,7 +152,7 @@ export function WarmthMapPage() {
   // TODO(백엔드): 실시간 방식 확정 전까지 30초 폴링 (Figma: 30초 갱신). 끊기면 마지막 값 유지 + 배너(214)
   const map = useQuery({
     queryKey: ['map', rec?.recordId],
-    queryFn: () => mapApi.get(rec?.emotions ?? [], rec?.todayCount),
+    queryFn: () => mapApi.get(rec?.emotions ?? []),
     enabled: !!rec,
     refetchInterval: 30_000,
   });
@@ -291,7 +291,8 @@ export function ReceivePage() {
 
   const receive = useQuery({
     queryKey: ['receive', rec?.recordId],
-    queryFn: () => patchApi.receive({ recordId: rec?.recordId, emotions: rec?.emotions, todayCount: rec?.todayCount }),
+    // 서버가 가장 최근 기록 기준으로 준다 (recordId는 화면 캐시 키로만 씀)
+    queryFn: () => patchApi.receive(),
     enabled: !!rec,
     retry: false,
     staleTime: Infinity,
@@ -301,7 +302,7 @@ export function ReceivePage() {
   const swipe = useSwipe(patches?.length ?? 0, index, goTo);
 
   const report = useMutation({
-    mutationFn: (id: number) => patchApi.report(id),
+    mutationFn: ({ id, emotion }: { id: number; emotion: EmotionCode }) => patchApi.report(id, emotion),
     onSuccess: (res) => {
       setReplaced((prev) => ({ ...prev, [index]: res.replaced }));
       setConfirmReport(false);
@@ -347,7 +348,7 @@ export function ReceivePage() {
                   {report.isError && <ErrorText text={parseApiError(report.error).message} />}
                   <div className="btn-row">
                     <button className="btn secondary" onClick={() => setConfirmReport(false)}>취소</button>
-                    <button className="btn danger-soft" disabled={report.isPending} onClick={() => report.mutate(p.patchMessageId!)}>신고</button>
+                    <button className="btn danger-soft" disabled={report.isPending} onClick={() => report.mutate({ id: p.patchMessageId!, emotion: p.emotion })}>신고</button>
                   </div>
                 </div>
               )}

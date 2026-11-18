@@ -1,32 +1,35 @@
 /**
  * 기능 API
  * - 실제 서버(nyam17.site): 마음 기록(moods), 사연 위기 검사, 캘린더, 그날 기록, 상세·삭제,
- *   보내기 질문(cheers/availability), 패치 보내기(cheers)
- * - 아직 서버에 없음 → MSW 목업: 온기 지도, 패치 받기·신고, 담요
- *   URL은 백엔드가 알려 준 실제 주소로 맞춰 둠. 요청·응답 형식은 아직 목업 기준
+ *   보내기 질문(cheers/availability), 패치 보내기(cheers), 온기 지도, 패치 받기, 담요·담요 칸
+ * - 아직 서버에 없음 → MSW 목업: 패치 신고
  *   (TODO(백엔드): Swagger에 올라오면 형식 맞추고 src/mocks/handlers.ts의 해당 핸들러 삭제)
  * 서버 응답은 여기서 화면용 모양으로 바꿔서 돌려준다 → 서버 형식이 바뀌어도 화면 코드는 그대로.
  */
 import type {
   ApiResponse,
   BlanketResponse,
+  BlanketSlotDetail,
   CalendarDay,
   CreateRecordRequest,
   CreateRecordResult,
   DayRecordsResponse,
   EmotionCode,
-  ReceivePatchesRequest,
   ReceivePatchesResponse,
   RecordDetail,
   ReportPatchResponse,
   SendPatchRequest,
   SendPatchResult,
   SendStatusResponse,
+  ServerBlanketResponse,
+  ServerBlanketSlotResponse,
   ServerCalendarResponse,
   ServerCheerAvailabilityResponse,
   ServerCheerSendResponse,
   ServerCreateRecordResponse,
   ServerDayListResponse,
+  ServerMapResponse,
+  ServerReceiveResponse,
   ServerRecordDetailResponse,
   ServerStoryCheckResponse,
   WarmthMapResponse,
@@ -116,28 +119,76 @@ export const patchApi = {
     }
   },
 
+  /**
+   * BLK-RCV-001/002 (실제 API) — 요청 본문 없음. 서버가 가장 최근 기록 기준으로 패치를 준다.
+   * TODO(백엔드): 응답에 담요 칸 번호(slotIndex)·담요 완성 여부(blanketCompleted)가 없어 기본값으로 채움
+   */
+  async receive(): Promise<ReceivePatchesResponse> {
+    const r = await unwrap(api.post<ApiResponse<ServerReceiveResponse>>('/api/v1/cheers/receive'));
+    return {
+      patches: (r.patches ?? []).map((p) => ({
+        patchMessageId: p.isDefault ? null : p.cheerId,
+        emotion: p.emotion,
+        message: p.message,
+        isDefault: p.isDefault,
+        slotIndex: null,
+        blanketCompleted: false,
+      })),
+    };
+  },
+
   /* ───────── 목업 (서버에 아직 없음 — URL만 실제 주소) ───────── */
 
-  /** BLK-RCV-001/002 */
-  receive: (body: ReceivePatchesRequest) =>
-    unwrap(api.post<ApiResponse<ReceivePatchesResponse>>('/api/v1/cheers/receive', body)),
-  /** BLK-RPT-001 */
-  report: (cheerId: number) =>
-    unwrap(api.post<ApiResponse<ReportPatchResponse>>(`/api/v1/cheers/${cheerId}/report`)),
+  /** BLK-RPT-001 (목업) — emotion은 목업이 같은 마음의 다른 패치를 고르는 데만 씀 */
+  report: (cheerId: number, emotion: EmotionCode) =>
+    unwrap(api.post<ApiResponse<ReportPatchResponse>>(`/api/v1/cheers/${cheerId}/report`, { emotion })),
+};
+
+const MAP_MODE: Record<ServerMapResponse['status'], WarmthMapResponse['mode']> = {
+  ACTIVE: 'NOW',
+  QUIET: 'QUIET_7D',
+  FIRST_LIGHT: 'FIRST_LIGHT',
 };
 
 export const mapApi = {
-  /** ITR-MAP-001 (목업) — 고른 감정을 함께 보냄. 명세상 1분 폴링 기준(실시간 연결 없음) */
-  get: (emotions: EmotionCode[], todayCount?: number) =>
-    unwrap(
-      api.get<ApiResponse<WarmthMapResponse>>('/api/v1/interactions/map', {
-        params: { emotions: emotions.join(','), todayCount },
-      }),
-    ),
+  /**
+   * ITR-MAP-001 (실제 API) — 서버가 가장 최근 기록의 감정별 인원을 준다. 30초 폴링(실시간 연결 없음)
+   * 감정을 2개 골랐으면 두 인원 중 큰 값을 보여 준다 (같은 사람이 두 번 세어지지 않도록 합치지 않음)
+   */
+  async get(emotions: EmotionCode[]): Promise<WarmthMapResponse> {
+    const r = await unwrap(api.get<ApiResponse<ServerMapResponse>>('/api/v1/interactions/map'));
+    const list = r.emotions ?? [];
+    const mine = list.filter((e) => emotions.includes(e.emotion));
+    const count = Math.max(0, ...(mine.length ? mine : list).map((e) => e.count));
+    return { mode: MAP_MODE[r.status] ?? 'FIRST_LIGHT', count, noBlanketNotice: !!r.blanketNotStackedNotice };
+  },
 };
 
 export const blanketApi = {
-  /** BLK-VIEW-001 (목업) */
-  get: (blanketId?: number) =>
-    unwrap(api.get<ApiResponse<BlanketResponse>>('/api/v1/blankets', { params: blanketId ? { blanketId } : undefined })),
+  /** BLK-VIEW-001 (실제 API) — 칸 목록에는 채워졌는지만 온다 */
+  async get(blanketId?: number): Promise<BlanketResponse> {
+    const r = await unwrap(
+      api.get<ApiResponse<ServerBlanketResponse>>('/api/v1/blankets', { params: blanketId ? { blanketId } : undefined }),
+    );
+    return {
+      blanketId: r.blanketId,
+      slots: (r.slots ?? []).map((x) => ({ index: x.slotIndex, emotion: null, filled: x.filled })),
+      hasPrev: r.hasPrevious,
+      hasNext: r.hasNext,
+    };
+  },
+  /** BLK-VIEW-002 (실제 API) — 칸을 누르면 그 칸의 패치 */
+  async slot(blanketId: number, slotIndex: number): Promise<BlanketSlotDetail> {
+    const r = await unwrap(
+      api.get<ApiResponse<ServerBlanketSlotResponse>>(`/api/v1/blankets/${blanketId}/slots/${slotIndex}`),
+    );
+    return {
+      index: r.slotIndex ?? slotIndex,
+      emotion: r.emotion ?? null,
+      message: r.message,
+      isDefault: r.isDefault,
+      receivedAt: r.receivedAt,
+      hasRecordOnDate: r.hasMoodRecordOnDate,
+    };
+  },
 };

@@ -1,14 +1,15 @@
 /**
  * MSW 목업 핸들러
  * - featureHandlers: 서버에 아직 없는 API (VITE_USE_MOCK=true면 항상 켜짐)
- *     온기 지도, 패치 받기·신고, 담요 — URL은 백엔드가 알려 준 실제 주소, 형식은 목업 기준
+ *     패치 신고 — URL은 백엔드가 알려 준 실제 주소, 형식은 목업 기준
  * - serverHandlers: 서버에 이미 있는 API의 목업 (VITE_MOCK_AUTH=true일 때만 — 백엔드 없이 시연용)
- *     인증, 마음 기록(moods), 사연 검사, 캘린더, 보내기 질문·패치 보내기(cheers)
+ *     인증, 마음 기록(moods), 사연 검사, 캘린더, 보내기 질문·패치 보내기(cheers),
+ *     온기 지도, 패치 받기, 담요·담요 칸 — 응답은 Swagger 형식 그대로
  * 실제 API가 나오면 featureHandlers에서 해당 핸들러를 지우면 그 요청은 진짜 서버로 간다.
  */
 import { http, HttpResponse, delay } from 'msw';
 import { EMOTIONS, MAX_EMOTIONS, PATCH_MAX_LENGTH, STORY_MAX_LENGTH } from '../constants/emotions';
-import type { CreateRecordRequest, EmotionCode, ReceivePatchesRequest, SendPatchRequest } from '../types/api';
+import type { CreateRecordRequest, EmotionCode, SendPatchRequest } from '../types/api';
 import {
   dateStr,
   db,
@@ -32,76 +33,21 @@ const QUESTIONS = [
 
 /* ───────────── 서버에 아직 없는 API ───────────── */
 export const featureHandlers = [
-  /* ITR-MAP-001 온기 지도 */
-  http.get('/api/v1/interactions/map', async ({ request }) => {
-    const params = new URL(request.url).searchParams;
-    const emotions = (params.get('emotions') ?? '').split(',').filter(Boolean) as EmotionCode[];
-    if (!emotions.length) return fail(400, 'NO_RECORD_TODAY', '오늘 기록이 없어요');
-    await delay(400);
-    const count = Math.floor(Math.random() * 60);
-    return ok({
-      mode: count > 0 ? 'NOW' : 'FIRST_LIGHT',
-      count,
-      emotions,
-      noBlanketNotice: Number(params.get('todayCount') ?? 1) >= 4,
-    });
-  }),
-
-  /* BLK-RCV-001/002 패치 받기 */
-  http.post('/api/v1/cheers/receive', async ({ request }) => {
-    const body = ((await request.json().catch(() => ({}))) ?? {}) as ReceivePatchesRequest;
-    const emotions = body.emotions ?? [];
-    if (!emotions.length) return fail(400, 'NO_RECORD_TODAY', '먼저 마음을 골라 주세요');
-    if (body.recordId && db.receivedRecordIds.has(body.recordId)) return fail(409, 'ALREADY_RECEIVED', '이미 패치를 받았어요');
-    const fourthOrLater = (body.todayCount ?? 1) >= 4;
-    const patches = emotions.map((emotion) => {
-      const queued = fourthOrLater ? null : takeFromQueue(emotion);
-      if (queued) db.delivered.set(queued.id, { emotion, reported: false });
-      return toReceived(emotion, queued, !fourthOrLater, body.recordId ?? null);
-    });
-    if (body.recordId) {
-      db.receivedRecordIds.add(body.recordId);
-      const rec = db.records.find((r) => r.id === body.recordId);
-      if (rec) rec.patches = patches.map((p) => ({ emotion: p.emotion, status: fourthOrLater ? 'DEFAULT_COMFORT' : 'RECEIVED', message: p.message }));
-    }
-    await delay(900); // Figma 215_도착하는중
-    return ok({ patches });
-  }),
-
-  /* BLK-RPT-001 신고 → 같은 자리 교체 */
-  http.post('/api/v1/cheers/:cheerId/report', ({ params }) => {
-    const info = db.delivered.get(Number(params.cheerId));
+  /* BLK-RPT-001 신고 → 같은 자리 교체. 실제 서버의 cheerId도 받을 수 있게 emotion을 본문으로 받음 */
+  http.post('/api/v1/cheers/:cheerId/report', async ({ params, request }) => {
+    const cheerId = Number(params.cheerId);
+    const body = ((await request.json().catch(() => ({}))) ?? {}) as { emotion?: EmotionCode };
+    const info = db.delivered.get(cheerId) ?? (body.emotion ? { emotion: body.emotion, reported: false } : null);
     if (!info) return fail(404, 'PATCH_NOT_FOUND', '존재하지 않는 패치예요');
     if (info.reported) return fail(409, 'ALREADY_REPORTED', '이미 신고했어요');
-    info.reported = true;
+    db.delivered.set(cheerId, { ...info, reported: true });
     const queued = takeFromQueue(info.emotion);
     if (queued) db.delivered.set(queued.id, { emotion: info.emotion, reported: false });
     const replaced = toReceived(info.emotion, queued, false);
     // 담요 칸에 남은 신고된 글도 교체한 글로 바꾼다
-    const slot = db.blankets.flatMap((b) => b.slots).find((x) => x?.patchMessageId === Number(params.cheerId));
+    const slot = db.blankets.flatMap((x) => x.slots).find((x) => x?.patchMessageId === cheerId);
     if (slot) { slot.message = replaced.message; slot.patchMessageId = replaced.patchMessageId; }
     return ok({ replaced });
-  }),
-
-  /* BLK-VIEW-001 담요 */
-  http.get('/api/v1/blankets', ({ request }) => {
-    const idParam = new URL(request.url).searchParams.get('blanketId');
-    const blanket = idParam ? db.blankets.find((b) => b.id === Number(idParam)) : db.blankets[db.blankets.length - 1];
-    if (!blanket) return fail(404, 'BLANKET_NOT_FOUND', '존재하지 않는 담요예요');
-    const pos = db.blankets.indexOf(blanket);
-    return ok({
-      blanketId: blanket.id,
-      slots: blanket.slots.map((s, index) => ({
-        index,
-        emotion: s?.emotion ?? null,
-        filled: s !== null,
-        message: s?.message ?? null,
-        receivedAt: s?.receivedAt ?? null,
-        recordId: s?.recordId ?? null,
-      })),
-      hasPrev: pos > 0,
-      hasNext: pos < db.blankets.length - 1,
-    });
   }),
 ];
 
@@ -199,5 +145,69 @@ export const serverHandlers = [
     enqueue(body.targetEmotion, body.content);
     db.sentByDate[todayStr()] = (db.sentByDate[todayStr()] ?? 0) + 1;
     return ok({ crisisDetected: false });
+  }),
+
+  /* ITR-MAP-001 온기 지도 — 가장 최근 기록 기준 */
+  http.get('/api/v1/interactions/map', async () => {
+    const rec = db.records[db.records.length - 1];
+    if (!rec) return fail(404, '404_NOT_FOUND', '오늘 기록이 없어요');
+    await delay(400);
+    const counts = rec.emotions.map((emotion) => ({ emotion, count: Math.floor(Math.random() * 60) }));
+    return ok({
+      status: counts.some((c) => c.count > 0) ? 'ACTIVE' : 'FIRST_LIGHT',
+      emotions: counts,
+      blanketNotStackedNotice: rec.todayIndex >= 4,
+    });
+  }),
+
+  /* BLK-RCV-001/002 패치 받기 — 요청 본문 없음, 가장 최근 기록 기준 */
+  http.post('/api/v1/cheers/receive', async () => {
+    const rec = db.records[db.records.length - 1];
+    if (!rec) return fail(404, '404_NOT_FOUND', '먼저 마음을 골라 주세요');
+    if (db.receivedRecordIds.has(rec.id)) return fail(409, '409_ALREADY_RECEIVED', '이미 패치를 받았어요');
+    const fourthOrLater = rec.todayIndex >= 4;
+    const received = rec.emotions.map((emotion) => {
+      const queued = fourthOrLater ? null : takeFromQueue(emotion);
+      if (queued) db.delivered.set(queued.id, { emotion, reported: false });
+      return toReceived(emotion, queued, !fourthOrLater, rec.id);
+    });
+    db.receivedRecordIds.add(rec.id);
+    rec.patches = received.map((p) => ({ emotion: p.emotion, status: fourthOrLater ? 'DEFAULT_COMFORT' : 'RECEIVED', message: p.message }));
+    await delay(900); // Figma 215_도착하는중
+    return ok({
+      patches: received.map((p) => ({ cheerId: p.patchMessageId ?? 0, emotion: p.emotion, message: p.message, isDefault: p.isDefault })),
+    });
+  }),
+
+  /* BLK-VIEW-001 담요 */
+  http.get('/api/v1/blankets', ({ request }) => {
+    const idParam = new URL(request.url).searchParams.get('blanketId');
+    const blanket = idParam ? db.blankets.find((x) => x.id === Number(idParam)) : db.blankets[db.blankets.length - 1];
+    if (!blanket) return fail(404, '404_NOT_FOUND', '존재하지 않는 담요예요');
+    const pos = db.blankets.indexOf(blanket);
+    return ok({
+      blanketId: blanket.id,
+      slots: blanket.slots.map((x, slotIndex) => ({ slotIndex, filled: x !== null })),
+      hasPrevious: pos > 0,
+      hasNext: pos < db.blankets.length - 1,
+    });
+  }),
+
+  /* BLK-VIEW-002 담요 칸 */
+  http.get('/api/v1/blankets/:blanketId/slots/:slotIndex', ({ params }) => {
+    const blanket = db.blankets.find((x) => x.id === Number(params.blanketId));
+    const slotIndex = Number(params.slotIndex);
+    const x = blanket?.slots[slotIndex];
+    if (!x) return fail(404, '404_NOT_FOUND', '빈 칸이에요');
+    return ok({
+      slotIndex,
+      cheerId: x.patchMessageId,
+      emotion: x.emotion,
+      message: x.message,
+      isDefault: x.patchMessageId === null,
+      receivedAt: x.receivedAt,
+      sentAt: null,
+      hasMoodRecordOnDate: x.recordId !== null && db.records.some((r) => r.id === x.recordId),
+    });
   }),
 ];

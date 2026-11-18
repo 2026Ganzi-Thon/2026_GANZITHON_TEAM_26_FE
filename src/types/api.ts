@@ -2,7 +2,7 @@
  * API 타입
  * - Server*: 백엔드(https://nyam17.site, Swagger "PATCH API")의 실제 응답 모양 — 서버와 1:1
  * - 그 외: 화면에서 쓰는 모양. src/api/patch.ts가 서버 응답을 이 모양으로 바꿔 준다.
- * - 온기 지도·패치 받기/신고/보내기·담요는 아직 서버에 없어 기능명세서 기준 초안 (MSW 목업)
+ * - 패치 신고만 아직 서버에 없어 기능명세서 기준 초안 (MSW 목업)
  */
 
 /** 모든 응답 공통 래퍼 */
@@ -131,31 +131,37 @@ export interface RecordDetail {
   story?: string;
 }
 
-/* ───────────── 온기 지도 (ITR-MAP-001) — 목업 ───────────── */
+/* ───────────── 온기 지도 (ITR-MAP-001) ───────────── */
 
+/** GET /api/v1/interactions/map — 서버 응답 */
+export interface ServerMapResponse {
+  status: 'ACTIVE' | 'QUIET' | 'FIRST_LIGHT';
+  emotions: { emotion: EmotionCode; count: number }[];
+  blanketNotStackedNotice: boolean;
+}
+/** 화면용: NOW = 지금 같은 마음인 사람이 있음, QUIET_7D = 조용한 시간, FIRST_LIGHT = 첫 빛 */
 export type MapMode = 'NOW' | 'QUIET_7D' | 'FIRST_LIGHT';
 export interface WarmthMapResponse {
   mode: MapMode;
   count: number;
-  emotions: EmotionCode[];
   noBlanketNotice: boolean;
 }
 
 /* ───────────── 패치 (BLK-*) ───────────── */
 
+/** POST /api/v1/cheers/receive — 서버 응답 (요청 본문 없음: 서버가 가장 최근 기록 기준으로 준다) */
+export interface ServerReceiveResponse {
+  patches: { cheerId: number; emotion: EmotionCode; message: string; isDefault: boolean }[];
+}
 export interface ReceivedPatch {
   patchMessageId: number | null; // 기본 메시지면 null
   emotion: EmotionCode;
   message: string;
   isDefault: boolean;
-  slotIndex: number | null; // 담요 칸 0~29, 4번째 이후면 null
+  /** TODO(백엔드): 서버 응답에 아직 없음 → 항상 null ('담요에 한 칸이 생겼어요' 문구 숨김) */
+  slotIndex: number | null;
+  /** TODO(백엔드): 서버 응답에 아직 없음 → 항상 false */
   blanketCompleted: boolean;
-}
-export interface ReceivePatchesRequest {
-  /** 목업용: 서버 기록과 목업 받기를 이어 주기 위해 함께 보냄 */
-  recordId?: number;
-  emotions?: EmotionCode[];
-  todayCount?: number;
 }
 export interface ReceivePatchesResponse {
   patches: ReceivedPatch[];
@@ -176,20 +182,46 @@ export type SendPatchResult =
   | { result: 'NEEDS_REVISION'; reason: string }
   | { result: 'CRISIS' };
 
-/* ───────────── 담요 (BLK-VIEW-001) — 목업 ───────────── */
+/* ───────────── 담요 (BLK-VIEW-001/002) ───────────── */
+
+/** GET /api/v1/blankets — 서버 응답 */
+export interface ServerBlanketResponse {
+  blanketId: number;
+  slots: { slotIndex: number; filled: boolean }[];
+  hasPrevious: boolean;
+  hasNext: boolean;
+}
+/** GET /api/v1/blankets/{blanketId}/slots/{slotIndex} — 서버 응답 */
+export interface ServerBlanketSlotResponse {
+  slotIndex: number;
+  cheerId: number | null;
+  emotion: EmotionCode | null;
+  message: string;
+  isDefault: boolean;
+  receivedAt: string; // ISO date-time
+  sentAt: string | null;
+  hasMoodRecordOnDate: boolean;
+}
 
 export interface BlanketSlot {
   index: number;
+  /** TODO(백엔드): 칸 목록에 감정이 없음 → 항상 null (기본 니트 색으로 칠함) */
   emotion: EmotionCode | null;
   filled: boolean;
-  /** BLK-VIEW-002 칸을 채운 패치 (413). 서버 확정 전 목업 필드 */
-  message?: string | null;
-  receivedAt?: string | null;
-  recordId?: number | null;
 }
 export interface BlanketResponse {
   blanketId: number;
   slots: BlanketSlot[];
   hasPrev: boolean;
   hasNext: boolean;
+}
+/** BLK-VIEW-002 담요 칸 패치 카드 (413) */
+export interface BlanketSlotDetail {
+  index: number;
+  emotion: EmotionCode | null;
+  message: string;
+  isDefault: boolean;
+  receivedAt: string;
+  /** 받은 날 마음 기록이 남아 있는지 — false면 '이날의 기록은 지워졌어요'(414) */
+  hasRecordOnDate: boolean;
 }
