@@ -36,6 +36,26 @@ const MESSAGES: Record<string, string> = {
 
   // 마음 기록 — 화면에서는 위기 안내로 보내므로 문구가 보일 일은 거의 없음
   '400_CRISIS_DETECTED': '지금 많이 힘드신 것 같아요',
+  '400_DUPLICATE_EMOTION_SELECTED': '같은 감정을 두 번 고를 수 없어요',
+
+  // 패치 보내기·받기·신고
+  '403_CHEER_SEND_RESTRICTED': '신고가 쌓여서 지금은 패치를 보낼 수 없어요',
+  '429_CHEER_COOLDOWN': '패치는 5분에 한 번 보낼 수 있어요',
+  '400_NO_MOOD_RECORD_TODAY': '오늘 기록을 남기면 패치를 받을 수 있어요',
+  '409_CONFLICT': '이미 처리된 요청이에요', // 같은 기록으로 패치 받기를 다시 요청할 때
+  '409_CHEER_ALREADY_REPORTED': '이미 신고한 패치예요',
+
+  // 담요
+  '400_INVALID_SLOT_INDEX': '담요 칸 번호가 올바르지 않아요',
+
+  // 온기 지도·함께 쉬는 방
+  '400_NO_RECENT_MOOD_RECORD': '최근 24시간 안에 남긴 기록이 없어요',
+  '400_CHEER_NOT_RECEIVED_YET': '패치를 먼저 받아 주세요',
+  '400_REST_ROOM_NOT_ENTERED': '입장 기록이 없어요. 다시 들어와 주세요',
+
+  // Swagger 공통 스키마에만 있는 코드
+  '423_LOCKED': '잠시 이용할 수 없어요. 잠시 후 다시 시도해 주세요',
+  '429_TOO_MANY_REQUESTS': '요청이 너무 많아요. 잠시 후 다시 시도해 주세요',
 };
 
 /**

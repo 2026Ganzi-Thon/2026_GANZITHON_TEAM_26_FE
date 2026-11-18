@@ -302,7 +302,7 @@ export function ReceivePage() {
   const swipe = useSwipe(patches?.length ?? 0, index, goTo);
 
   const report = useMutation({
-    mutationFn: ({ id, emotion }: { id: number; emotion: EmotionCode }) => patchApi.report(id, emotion),
+    mutationFn: ({ id }: { id: number }) => patchApi.report(id),
     onSuccess: (res) => {
       setReplaced((prev) => ({ ...prev, [index]: res.replaced }));
       setConfirmReport(false);
@@ -348,7 +348,7 @@ export function ReceivePage() {
                   {report.isError && <ErrorText text={parseApiError(report.error).message} />}
                   <div className="btn-row">
                     <button className="btn secondary" onClick={() => setConfirmReport(false)}>취소</button>
-                    <button className="btn danger-soft" disabled={report.isPending} onClick={() => report.mutate({ id: p.patchMessageId!, emotion: p.emotion })}>신고</button>
+                    <button className="btn danger-soft" disabled={report.isPending} onClick={() => report.mutate({ id: p.patchMessageId! })}>신고</button>
                   </div>
                 </div>
               )}

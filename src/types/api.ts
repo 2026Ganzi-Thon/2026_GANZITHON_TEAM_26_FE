@@ -153,6 +153,17 @@ export interface WarmthMapResponse {
 export interface ServerReceiveResponse {
   patches: { cheerId: number; emotion: EmotionCode; message: string; isDefault: boolean }[];
 }
+/** BLK-RPT-001 서버 응답 — replaced는 Swagger의 ReceivedCheerResponse */
+export interface ServerReportResponse {
+  replaced: {
+    cheerId: number;
+    emotion: EmotionCode;
+    message: string;
+    isDefault: boolean;
+    slotIndex?: number;
+    blanketCompleted?: boolean;
+  };
+}
 export interface ReceivedPatch {
   patchMessageId: number | null; // 기본 메시지면 null
   emotion: EmotionCode;

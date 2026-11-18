@@ -4,8 +4,8 @@
 
 - 스택: Vite · React 19 · TypeScript · React Router · TanStack Query · axios · MSW
 - 백엔드: `https://nyam17.site` (Swagger "PATCH API")
-  - **실제 서버 연결**: 회원가입·이메일 인증·로그인·로그아웃, 마음 기록 저장, 사연 위기 검사, 캘린더, 그날 기록, 기록 상세·삭제, 보내기 질문, 패치 보내기, 온기 지도, 패치 받기, 담요·담요 칸
-  - **목업(MSW)**: 패치 신고 — 서버에 아직 없는 API (URL은 실제 주소로 맞춰 둠)
+  - **실제 서버 연결**: 회원가입·이메일 인증·로그인·로그아웃, 마음 기록 저장, 사연 위기 검사, 캘린더, 그날 기록, 기록 상세·삭제, 보내기 질문, 패치 보내기, 온기 지도, 패치 받기·신고, 담요·담요 칸
+  - **목업(MSW)**: 지금은 없음 (`VITE_MOCK_AUTH=true`면 백엔드 없이 전부 목업으로 시연)
 
 ## 디자인 기준
 
@@ -55,7 +55,7 @@ src/
 | / | 마음 고르기 | CRD-WRITE-001/003 | 실제 |
 | /story | 사연 입력·위기 검사 | CRD-WRITE-002, ALRT-DETECT-001 | 실제 |
 | /map | 온기 지도 | ITR-MAP-001 | 실제 `/interactions/map` (30초 폴링, 명세는 1분) |
-| /receive | 패치 받기·신고 | BLK-RCV-001/002, BLK-RPT-001 | 실제 `/cheers/receive` · 신고는 목업 `/cheers/{cheerId}/report` |
+| /receive | 패치 받기·신고 | BLK-RCV-001/002, BLK-RPT-001 | 실제 `/cheers/receive`, `/cheers/{cheerId}/report` |
 | /send | 패치 선물하기 | BLK-SEND-001/002 | 실제 `/cheers` |
 | /records | 캘린더 + 그날 기록(시트) | CRD-VIEW-001/002 | 실제 |
 | /records/:recordId | 기록 상세·삭제 | CRD-VIEW-003, CRD-DEL-001 | 실제 |
@@ -86,6 +86,5 @@ src/
 - 기록 저장 시 `400_CRISIS_DETECTED`면 기록이 저장되는지
 - 담요 칸 목록에 감정(`emotion`)이 없음 → 채워진 칸은 기본 니트 색으로 칠함 (감정별 색 불가)
 - 패치 받기 응답에 담요 칸 번호(`slotIndex`)·완성 여부(`blanketCompleted`)가 없음 → '담요에 한 칸이 생겼어요'·'담요 완성' 안내가 안 보임
-- 패치 신고 API 요청·응답 형식 (지금은 목업)
 
 하루 발송 한도·쿨타임은 두지 않기로 했어요(회의 결정).

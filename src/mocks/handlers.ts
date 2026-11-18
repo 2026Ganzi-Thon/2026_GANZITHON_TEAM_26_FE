@@ -1,15 +1,14 @@
 /**
  * MSW 목업 핸들러
- * - featureHandlers: 서버에 아직 없는 API (VITE_USE_MOCK=true면 항상 켜짐)
- *     패치 신고 — URL은 백엔드가 알려 준 실제 주소, 형식은 목업 기준
+ * - featureHandlers: 서버에 아직 없는 API (VITE_USE_MOCK=true면 항상 켜짐) — 지금은 없음
  * - serverHandlers: 서버에 이미 있는 API의 목업 (VITE_MOCK_AUTH=true일 때만 — 백엔드 없이 시연용)
  *     인증, 마음 기록(moods), 사연 검사, 캘린더, 보내기 질문·패치 보내기(cheers),
- *     온기 지도, 패치 받기, 담요·담요 칸 — 응답은 Swagger 형식 그대로
+ *     온기 지도, 패치 받기, 패치 신고, 담요·담요 칸 — 응답은 Swagger 형식 그대로
  * 실제 API가 나오면 featureHandlers에서 해당 핸들러를 지우면 그 요청은 진짜 서버로 간다.
  */
-import { http, HttpResponse, delay } from 'msw';
+import { http, HttpResponse, delay, type HttpHandler } from 'msw';
 import { EMOTIONS, MAX_EMOTIONS, PATCH_MAX_LENGTH, STORY_MAX_LENGTH } from '../constants/emotions';
-import type { CreateRecordRequest, EmotionCode, SendPatchRequest } from '../types/api';
+import type { CreateRecordRequest, SendPatchRequest } from '../types/api';
 import {
   dateStr,
   db,
@@ -32,14 +31,17 @@ const QUESTIONS = [
 ];
 
 /* ───────────── 서버에 아직 없는 API ───────────── */
-export const featureHandlers = [
-  /* BLK-RPT-001 신고 → 같은 자리 교체. 실제 서버의 cheerId도 받을 수 있게 emotion을 본문으로 받음 */
-  http.post('/api/v1/cheers/:cheerId/report', async ({ params, request }) => {
+// 지금은 없음 — 새 기능을 목업으로 먼저 만들 때 여기에 추가
+export const featureHandlers: HttpHandler[] = [];
+
+/* ───────────── 서버에 있는 API의 목업 (백엔드 없이 시연할 때만) ───────────── */
+export const serverHandlers = [
+  /* BLK-RPT-001 신고 → 같은 자리 교체 (응답은 Swagger 형식: data.replaced = ReceivedCheerResponse) */
+  http.post('/api/v1/cheers/:cheerId/report', ({ params }) => {
     const cheerId = Number(params.cheerId);
-    const body = ((await request.json().catch(() => ({}))) ?? {}) as { emotion?: EmotionCode };
-    const info = db.delivered.get(cheerId) ?? (body.emotion ? { emotion: body.emotion, reported: false } : null);
-    if (!info) return fail(404, 'PATCH_NOT_FOUND', '존재하지 않는 패치예요');
-    if (info.reported) return fail(409, 'ALREADY_REPORTED', '이미 신고했어요');
+    const info = db.delivered.get(cheerId);
+    if (!info) return fail(404, '404_NOT_FOUND', '요청한 리소스를 찾을 수 없습니다.');
+    if (info.reported) return fail(409, '409_CHEER_ALREADY_REPORTED', '이미 신고 처리된 메시지예요.');
     db.delivered.set(cheerId, { ...info, reported: true });
     const queued = takeFromQueue(info.emotion);
     if (queued) db.delivered.set(queued.id, { emotion: info.emotion, reported: false });
@@ -47,12 +49,16 @@ export const featureHandlers = [
     // 담요 칸에 남은 신고된 글도 교체한 글로 바꾼다
     const slot = db.blankets.flatMap((x) => x.slots).find((x) => x?.patchMessageId === cheerId);
     if (slot) { slot.message = replaced.message; slot.patchMessageId = replaced.patchMessageId; }
-    return ok({ replaced });
+    return ok({
+      replaced: {
+        cheerId: replaced.patchMessageId ?? 0,
+        emotion: replaced.emotion,
+        message: replaced.message,
+        isDefault: replaced.isDefault,
+      },
+    });
   }),
-];
 
-/* ───────────── 서버에 있는 API의 목업 (백엔드 없이 시연할 때만) ───────────── */
-export const serverHandlers = [
   /* Auth */
   http.post('/api/v1/auth/email-verifications', () => ok(null)),
   http.post('/api/v1/auth/email-verifications/confirm', async ({ request }) => {

@@ -2,8 +2,7 @@
  * 기능 API
  * - 실제 서버(nyam17.site): 마음 기록(moods), 사연 위기 검사, 캘린더, 그날 기록, 상세·삭제,
  *   보내기 질문(cheers/availability), 패치 보내기(cheers), 온기 지도, 패치 받기, 담요·담요 칸
- * - 아직 서버에 없음 → MSW 목업: 패치 신고
- *   (TODO(백엔드): Swagger에 올라오면 형식 맞추고 src/mocks/handlers.ts의 해당 핸들러 삭제)
+ *   패치 신고(cheers/{cheerId}/report)
  * 서버 응답은 여기서 화면용 모양으로 바꿔서 돌려준다 → 서버 형식이 바뀌어도 화면 코드는 그대로.
  */
 import type {
@@ -30,6 +29,7 @@ import type {
   ServerDayListResponse,
   ServerMapResponse,
   ServerReceiveResponse,
+  ServerReportResponse,
   ServerRecordDetailResponse,
   ServerStoryCheckResponse,
   WarmthMapResponse,
@@ -137,11 +137,26 @@ export const patchApi = {
     };
   },
 
-  /* ───────── 목업 (서버에 아직 없음 — URL만 실제 주소) ───────── */
-
-  /** BLK-RPT-001 (목업) — emotion은 목업이 같은 마음의 다른 패치를 고르는 데만 씀 */
-  report: (cheerId: number, emotion: EmotionCode) =>
-    unwrap(api.post<ApiResponse<ReportPatchResponse>>(`/api/v1/cheers/${cheerId}/report`, { emotion })),
+  /**
+   * BLK-RPT-001 (실제 API) — 요청 본문 없음(신고 사유는 받지 않음).
+   * 신고한 패치는 숨김 처리되고, 서버가 같은 자리를 다른 패치(또는 기본 메시지)로 바꿔서 돌려준다.
+   * 에러: 403 본인이 받지 않은 패치 / 404 없는 패치 / 409_CHEER_ALREADY_REPORTED 이미 신고함
+   */
+  async report(cheerId: number): Promise<ReportPatchResponse> {
+    const r = await unwrap(api.post<ApiResponse<ServerReportResponse>>(`/api/v1/cheers/${cheerId}/report`));
+    const p = r.replaced;
+    return {
+      replaced: {
+        patchMessageId: p.isDefault ? null : p.cheerId,
+        emotion: p.emotion,
+        message: p.message,
+        isDefault: p.isDefault,
+        // 교체는 새 칸이 생기는 게 아니므로 receive()와 같이 '담요에 한 칸이 생겼어요' 문구를 숨긴다
+        slotIndex: null,
+        blanketCompleted: false,
+      },
+    };
+  },
 };
 
 const MAP_MODE: Record<ServerMapResponse['status'], WarmthMapResponse['mode']> = {
