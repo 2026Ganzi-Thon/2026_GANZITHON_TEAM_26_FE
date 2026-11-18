@@ -9,10 +9,10 @@ import ChevronRight from '../assets/icons/chevron-right.svg?react';
 import { ConfirmModal, ErrorText, Header, Loading, Spacer } from '../components/Layout';
 import { BLANKET_SLOTS, emotionColor, emotionLabel } from '../constants/emotions';
 import type { BlanketSlot } from '../types/api';
-
-/** 칸 목록에 감정이 아직 안 오면(TODO(백엔드)) 채워진 칸을 이 색으로 칠한다 */
-const KNIT_FALLBACK = 'var(--color-main-line)';
 import { Thread } from './home';
+
+/** 채워진 칸인데 감정이 없으면(기본 메시지 등) 이 색으로 칠한다 */
+const KNIT_FALLBACK = 'var(--color-main-line)';
 
 const pad = (n: number) => String(n).padStart(2, '0');
 const WEEK = ['일', '월', '화', '수', '목', '금', '토'];

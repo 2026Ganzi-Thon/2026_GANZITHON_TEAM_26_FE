@@ -15,6 +15,7 @@ import type {
   DayRecordsResponse,
   EmotionCode,
   ReceivePatchesResponse,
+  ReceivedPatch,
   RecordDetail,
   ReportPatchResponse,
   SendPatchRequest,
@@ -29,6 +30,7 @@ import type {
   ServerDayListResponse,
   ServerMapResponse,
   ServerReceiveResponse,
+  ServerReceivedCheer,
   ServerReportResponse,
   ServerRecordDetailResponse,
   ServerStoryCheckResponse,
@@ -89,11 +91,27 @@ export const recordApi = {
   remove: (recordId: number) => unwrap(api.delete<ApiResponse<null>>(`/api/v1/moods/${recordId}`)),
 };
 
+/** 서버의 받은 패치 → 화면용 (패치 받기·신고 공통) */
+const toReceivedPatch = (p: ServerReceivedCheer): ReceivedPatch => ({
+  patchMessageId: p.isDefault ? null : p.cheerId,
+  emotion: p.emotion,
+  message: p.message,
+  isDefault: p.isDefault,
+  slotIndex: p.slotIndex ?? null,
+  blanketCompleted: p.blanketCompleted ?? false,
+});
+
 export const patchApi = {
-  /** BLK-SEND-001 (실제 API) — 감정마다 질문이 여러 개면 하나를 골라 보여 준다. 발송 한도 없음 */
+  /**
+   * BLK-SEND-001 (실제 API) — 보낼 수 있는지(5분 쿨타임·신고 누적 제한)와 감정별 질문.
+   * 감정마다 질문이 여러 개면 하나를 골라 보여 준다.
+   */
   async sendStatus(): Promise<SendStatusResponse> {
     const r = await unwrap(api.get<ApiResponse<ServerCheerAvailabilityResponse>>('/api/v1/cheers/availability'));
     return {
+      canSend: r.sendable ?? true,
+      cooldownUntil: r.cooldownUntil ?? null,
+      restrictedUntil: r.restrictedUntil ?? null,
       questions: (r.questions ?? []).map((q) => ({
         emotion: q.emotion,
         question: q.questions[Math.floor(Math.random() * q.questions.length)] ?? '이 마음일 때 나를 조금 버티게 한 건 뭐였어요?',
@@ -119,22 +137,10 @@ export const patchApi = {
     }
   },
 
-  /**
-   * BLK-RCV-001/002 (실제 API) — 요청 본문 없음. 서버가 가장 최근 기록 기준으로 패치를 준다.
-   * TODO(백엔드): 응답에 담요 칸 번호(slotIndex)·담요 완성 여부(blanketCompleted)가 없어 기본값으로 채움
-   */
+  /** BLK-RCV-001/002 (실제 API) — 요청 본문 없음. 서버가 가장 최근 기록 기준으로 패치를 준다. */
   async receive(): Promise<ReceivePatchesResponse> {
     const r = await unwrap(api.post<ApiResponse<ServerReceiveResponse>>('/api/v1/cheers/receive'));
-    return {
-      patches: (r.patches ?? []).map((p) => ({
-        patchMessageId: p.isDefault ? null : p.cheerId,
-        emotion: p.emotion,
-        message: p.message,
-        isDefault: p.isDefault,
-        slotIndex: null,
-        blanketCompleted: false,
-      })),
-    };
+    return { patches: (r.patches ?? []).map(toReceivedPatch) };
   },
 
   /**
@@ -144,18 +150,7 @@ export const patchApi = {
    */
   async report(cheerId: number): Promise<ReportPatchResponse> {
     const r = await unwrap(api.post<ApiResponse<ServerReportResponse>>(`/api/v1/cheers/${cheerId}/report`));
-    const p = r.replaced;
-    return {
-      replaced: {
-        patchMessageId: p.isDefault ? null : p.cheerId,
-        emotion: p.emotion,
-        message: p.message,
-        isDefault: p.isDefault,
-        // 교체는 새 칸이 생기는 게 아니므로 receive()와 같이 '담요에 한 칸이 생겼어요' 문구를 숨긴다
-        slotIndex: null,
-        blanketCompleted: false,
-      },
-    };
+    return { replaced: toReceivedPatch(r.replaced) };
   },
 };
 
@@ -169,25 +164,28 @@ export const mapApi = {
   /**
    * ITR-MAP-001 (실제 API) — 서버가 가장 최근 기록의 감정별 인원을 준다. 30초 폴링(실시간 연결 없음)
    * 감정을 2개 골랐으면 두 인원 중 큰 값을 보여 준다 (같은 사람이 두 번 세어지지 않도록 합치지 않음)
+   * 내 감정이 응답에 없으면 0 — 다른 마음인 사람 수를 '같은 마음'처럼 보여 주지 않는다
    */
   async get(emotions: EmotionCode[]): Promise<WarmthMapResponse> {
     const r = await unwrap(api.get<ApiResponse<ServerMapResponse>>('/api/v1/interactions/map'));
     const list = r.emotions ?? [];
     const mine = list.filter((e) => emotions.includes(e.emotion));
-    const count = Math.max(0, ...(mine.length ? mine : list).map((e) => e.count));
-    return { mode: MAP_MODE[r.status] ?? 'FIRST_LIGHT', count, noBlanketNotice: !!r.blanketNotStackedNotice };
+    const count = Math.max(0, ...mine.map((e) => e.count));
+    const mode = MAP_MODE[r.status] ?? 'FIRST_LIGHT';
+    // 지금 같은 마음인 사람이 0명이면 첫 빛 화면
+    return { mode: mode === 'NOW' && count === 0 ? 'FIRST_LIGHT' : mode, count, noBlanketNotice: !!r.blanketNotStackedNotice };
   },
 };
 
 export const blanketApi = {
-  /** BLK-VIEW-001 (실제 API) — 칸 목록에는 채워졌는지만 온다 */
+  /** BLK-VIEW-001 (실제 API) — 칸마다 채워졌는지와 감정(칸 색)이 온다 */
   async get(blanketId?: number): Promise<BlanketResponse> {
     const r = await unwrap(
       api.get<ApiResponse<ServerBlanketResponse>>('/api/v1/blankets', { params: blanketId ? { blanketId } : undefined }),
     );
     return {
       blanketId: r.blanketId,
-      slots: (r.slots ?? []).map((x) => ({ index: x.slotIndex, emotion: null, filled: x.filled })),
+      slots: (r.slots ?? []).map((x) => ({ index: x.slotIndex, emotion: x.emotion ?? null, filled: x.filled })),
       hasPrev: r.hasPrevious,
       hasNext: r.hasNext,
     };

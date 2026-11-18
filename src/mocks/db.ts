@@ -49,6 +49,8 @@ export const db = {
     [0, 1].map((j) => ({ id: nextId++, emotion: e.code, message: SEED_MESSAGES[(i + j) % SEED_MESSAGES.length], fromMe: false })),
   ) as QueuedPatch[],
   sentByDate: {} as Record<string, number>,
+  /** 마지막으로 패치를 보낸 시각(ms) — 5분 쿨타임 계산용 */
+  lastSentAt: null as number | null,
   /** 패치 받기를 이미 한 기록 (재요청 409) */
   receivedRecordIds: new Set<number>(),
   delivered: new Map<number, { emotion: EmotionCode; reported: boolean }>(),

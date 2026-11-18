@@ -2,7 +2,7 @@
  * API 타입
  * - Server*: 백엔드(https://nyam17.site, Swagger "PATCH API")의 실제 응답 모양 — 서버와 1:1
  * - 그 외: 화면에서 쓰는 모양. src/api/patch.ts가 서버 응답을 이 모양으로 바꿔 준다.
- * - 패치 신고만 아직 서버에 없어 기능명세서 기준 초안 (MSW 목업)
+ * - 모든 기능이 실제 서버에 연결됨. MSW 목업(src/mocks)은 백엔드 없이 시연할 때만 쓴다
  */
 
 /** 모든 응답 공통 래퍼 */
@@ -86,9 +86,14 @@ export interface ServerRecordDetailResponse {
   patches: { emotion: EmotionCode; status: 'RECEIVED' | 'NOT_RECEIVED' | 'DEFAULT_COMFORT'; message?: string }[];
   story?: string;
 }
+/** GET /api/v1/cheers/availability — 패치는 5분에 한 번(쿨타임) */
 export interface ServerCheerAvailabilityResponse {
-  /** 발송 한도 폐지로 서버에서 빠질 예정 — 프론트는 쓰지 않음 */
-  sendable?: boolean;
+  /** 지금 보낼 수 있는지 (쿨타임 중이거나 신고 누적으로 제한되면 false) */
+  sendable: boolean;
+  /** 쿨타임이 끝나는 시각 (ISO date-time). 쿨타임 중이 아니면 null */
+  cooldownUntil?: string | null;
+  /** 신고 누적 제한이 끝나는 시각 (ISO date-time). 제한 중이 아니면 null */
+  restrictedUntil?: string | null;
   questions: { emotion: EmotionCode; questions: string[] }[];
 }
 /** POST /api/v1/cheers — 위기 표현이면 거절하지 않고 crisisDetected: true. 검수 거절은 400_CHEER_* */
@@ -149,29 +154,33 @@ export interface WarmthMapResponse {
 
 /* ───────────── 패치 (BLK-*) ───────────── */
 
+/** 받은 패치 한 개 — Swagger의 ReceivedCheerResponse (패치 받기·신고 응답에 같이 쓰임) */
+export interface ServerReceivedCheer {
+  cheerId: number;
+  emotion: EmotionCode;
+  message: string;
+  isDefault: boolean;
+  /** 이 패치가 쌓인 담요 칸 번호. 칸에 쌓이지 않았으면 null */
+  slotIndex?: number | null;
+  /** 이 패치로 담요 30칸이 다 찼는지 */
+  blanketCompleted?: boolean;
+}
 /** POST /api/v1/cheers/receive — 서버 응답 (요청 본문 없음: 서버가 가장 최근 기록 기준으로 준다) */
 export interface ServerReceiveResponse {
-  patches: { cheerId: number; emotion: EmotionCode; message: string; isDefault: boolean }[];
+  patches: ServerReceivedCheer[];
 }
-/** BLK-RPT-001 서버 응답 — replaced는 Swagger의 ReceivedCheerResponse */
+/** BLK-RPT-001 서버 응답 */
 export interface ServerReportResponse {
-  replaced: {
-    cheerId: number;
-    emotion: EmotionCode;
-    message: string;
-    isDefault: boolean;
-    slotIndex?: number;
-    blanketCompleted?: boolean;
-  };
+  replaced: ServerReceivedCheer;
 }
 export interface ReceivedPatch {
   patchMessageId: number | null; // 기본 메시지면 null
   emotion: EmotionCode;
   message: string;
   isDefault: boolean;
-  /** TODO(백엔드): 서버 응답에 아직 없음 → 항상 null ('담요에 한 칸이 생겼어요' 문구 숨김) */
+  /** 담요에 쌓인 칸 번호 — 있으면 '담요에 한 칸이 생겼어요' 안내 */
   slotIndex: number | null;
-  /** TODO(백엔드): 서버 응답에 아직 없음 → 항상 false */
+  /** 담요 30칸 완성 — true면 완성 안내 */
   blanketCompleted: boolean;
 }
 export interface ReceivePatchesResponse {
@@ -180,8 +189,13 @@ export interface ReceivePatchesResponse {
 export interface ReportPatchResponse {
   replaced: ReceivedPatch;
 }
-/** BLK-SEND-001 (실제 API: /cheers/availability) — 발송 한도·쿨타임 없음(회의 결정), 감정별 질문만 */
+/** BLK-SEND-001 (실제 API: /cheers/availability) — 패치는 5분에 한 번(쿨타임). 못 보내면 310_보내기제한 */
 export interface SendStatusResponse {
+  canSend: boolean;
+  /** 쿨타임이 끝나는 시각 (ISO). 쿨타임이 아니면 null */
+  cooldownUntil: string | null;
+  /** 신고 누적 제한이 끝나는 시각 (ISO). 제한이 아니면 null */
+  restrictedUntil: string | null;
   questions: { emotion: EmotionCode; question: string }[];
 }
 export interface SendPatchRequest {
@@ -198,7 +212,7 @@ export type SendPatchResult =
 /** GET /api/v1/blankets — 서버 응답 */
 export interface ServerBlanketResponse {
   blanketId: number;
-  slots: { slotIndex: number; filled: boolean }[];
+  slots: { slotIndex: number; filled: boolean; emotion?: EmotionCode | null }[];
   hasPrevious: boolean;
   hasNext: boolean;
 }
@@ -216,7 +230,7 @@ export interface ServerBlanketSlotResponse {
 
 export interface BlanketSlot {
   index: number;
-  /** TODO(백엔드): 칸 목록에 감정이 없음 → 항상 null (기본 니트 색으로 칠함) */
+  /** 칸에 쌓인 패치의 감정 (빈 칸이면 null) */
   emotion: EmotionCode | null;
   filled: boolean;
 }

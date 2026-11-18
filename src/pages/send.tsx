@@ -1,21 +1,35 @@
 /**
- * 3xx 보내기 — BLK-SEND-001(실제 API) 감정별 질문, BLK-SEND-002(실제 API) 검수·발송. Figma 301~309
- * 하루 발송 한도·쿨타임은 없음(회의 결정) → 310_보내기제한 화면 사용 안 함
+ * 3xx 보내기 — BLK-SEND-001(실제 API) 보낼 수 있는지·감정별 질문, BLK-SEND-002(실제 API) 검수·발송. Figma 301~310
+ * 패치는 5분에 한 번(쿨타임). 쿨타임 중이거나 신고 누적으로 제한되면 310_보내기제한 화면
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { parseApiError } from '../api/errors';
-import { patchApi } from '../api/patch';
+import { patchApi, toTime } from '../api/patch';
 import { ErrorText, Header, Loading, Spacer } from '../components/Layout';
 import moonUrl from '../assets/illust/patch-moon.svg';
 import { PATCH_MAX_LENGTH, emotionLabel } from '../constants/emotions';
 import type { EmotionCode } from '../types/api';
 
+/** ISO 시각 → 오늘이면 'HH:mm', 다른 날이면 'M월 D일 HH:mm' */
+const untilLabel = (iso: string) => {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return toTime(iso);
+  const sameDay = d.toDateString() === new Date().toDateString();
+  return sameDay ? toTime(iso) : `${d.getMonth() + 1}월 ${d.getDate()}일 ${toTime(iso)}`;
+};
+
 export function SendPage() {
   const navigate = useNavigate();
   const qc = useQueryClient();
-  const status = useQuery({ queryKey: ['send-status'], queryFn: patchApi.sendStatus, staleTime: 60_000 });
+  const status = useQuery({
+    queryKey: ['send-status'],
+    queryFn: patchApi.sendStatus,
+    staleTime: 60_000,
+    // 제한 중이면 풀렸는지 주기적으로 다시 확인
+    refetchInterval: (query) => (query.state.data && !query.state.data.canSend ? 15_000 : false),
+  });
   const [target, setTarget] = useState<EmotionCode | null>(null);
   const [content, setContent] = useState('');
   const [revision, setRevision] = useState('');
@@ -36,12 +50,19 @@ export function SendPage() {
         qc.invalidateQueries({ queryKey: ['calendar'] });
       }
     },
+    onError: (err) => {
+      // 쿨타임·신고 누적 제한이면 보낼 수 있는지 다시 받아서 310_보내기제한 화면으로
+      const { code } = parseApiError(err);
+      if (code === '429_CHEER_COOLDOWN' || code === '403_CHEER_SEND_RESTRICTED') {
+        qc.invalidateQueries({ queryKey: ['send-status'] });
+      }
+    },
   });
 
   if (status.isPending) return (<><Header title="패치 선물하기" /><Loading /></>);
   if (status.isError) return (<><Header title="패치 선물하기" /><ErrorText text={parseApiError(status.error).message} /></>);
 
-  const { questions } = status.data;
+  const { canSend, cooldownUntil, restrictedUntil, questions } = status.data;
 
   if (done) {
     // 308_발송완료
@@ -58,6 +79,25 @@ export function SendPage() {
         <div className="btn-row">
           <button className="btn secondary" onClick={() => setDone(false)}>패치 더 선물하기</button>
         </div>
+      </>
+    );
+  }
+
+  if (!canSend) {
+    // 310_보내기제한 — 5분 쿨타임 또는 신고 누적 제한
+    const title = cooldownUntil ? '패치는 5분에 한 번 보낼 수 있어요' : '지금은 패치를 보낼 수 없어요';
+    const sub = cooldownUntil
+      ? `${untilLabel(cooldownUntil)}부터 다시 보낼 수 있어요`
+      : restrictedUntil
+        ? `신고가 쌓여서 ${untilLabel(restrictedUntil)}까지 보낼 수 없어요`
+        : '잠시 후 다시 시도해 주세요';
+    return (
+      <>
+        <Header title="패치 선물하기" />
+        <h2 className="page-title">{title}</h2>
+        <p className="page-sub">{sub}</p>
+        <Spacer />
+        <button className="btn" onClick={() => navigate('/')}>마음 고르러 가기</button>
       </>
     );
   }

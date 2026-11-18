@@ -22,7 +22,7 @@ export function HelpPage() {
       <Header title="도움 요청" hideHelp back={goBack} />
       {state?.from === 'send' && <div className="info-banner">ⓘ 보내려던 글은 보내지 않았어요</div>}
       {state?.from === 'story' && <div className="info-banner">ⓘ 사연은 나만 보기로 저장했어요</div>}
-      {/* 기록 저장 중 서버가 위기 표현 감지(400_CRISIS_DETECTED) — TODO(백엔드): 이때 기록이 저장되는지 확인 */}
+      {/* 기록 저장 중 서버가 위기 표현 감지(400_CRISIS_DETECTED) — 이때 서버는 기록을 저장하지 않음(BE 확인) */}
       {state?.from === 'record' && <div className="info-banner">ⓘ 이번 기록은 저장하지 않았어요</div>}
       <h2 className="page-title">지금 많이 힘드신가요?</h2>
       <p className="page-sub">혼자 견디지 않아도 괜찮아요</p>

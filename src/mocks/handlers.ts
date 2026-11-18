@@ -25,6 +25,11 @@ const ok = <T>(data: T, status = 200) => HttpResponse.json({ code: 'SUCCESS', me
 const fail = (status: number, code: string, message: string) => HttpResponse.json({ code, message, data: null }, { status });
 const isAuthed = (req: Request) => req.headers.get('Authorization')?.startsWith('Bearer ');
 
+const COOLDOWN_MS = 5 * 60 * 1000;
+/** 쿨타임 중이면 끝나는 시각(ISO), 아니면 null */
+const cooldownUntil = () =>
+  db.lastSentAt && Date.now() - db.lastSentAt < COOLDOWN_MS ? new Date(db.lastSentAt + COOLDOWN_MS).toISOString() : null;
+
 const QUESTIONS = [
   '이 마음일 때 나를 조금 버티게 한 건 뭐였어요?',
   '그럴 때 무엇이 버티게 해 주었나요?',
@@ -55,6 +60,8 @@ export const serverHandlers = [
         emotion: replaced.emotion,
         message: replaced.message,
         isDefault: replaced.isDefault,
+        slotIndex: replaced.slotIndex,
+        blanketCompleted: replaced.blanketCompleted,
       },
     });
   }),
@@ -130,9 +137,12 @@ export const serverHandlers = [
     return ok(null);
   }),
 
-  /* 보내기 질문 — 패치가 부족한 마음부터 (발송 한도 없음) */
+  /* 보내기 가능 확인·질문 — 5분 쿨타임, 질문은 패치가 부족한 마음부터 */
   http.get('/api/v1/cheers/availability', () =>
     ok({
+      sendable: cooldownUntil() === null,
+      cooldownUntil: cooldownUntil(),
+      restrictedUntil: null,
       questions: [...EMOTIONS]
         .sort((a, b) => db.queue.filter((q) => q.emotion === a.code).length - db.queue.filter((q) => q.emotion === b.code).length)
         .map((e) => ({ emotion: e.code, questions: QUESTIONS })),
@@ -145,10 +155,12 @@ export const serverHandlers = [
     if (!body.targetEmotion || !body.content || body.content.length > PATCH_MAX_LENGTH) {
       return fail(400, '400_INVALID_INPUT', '입력값이 올바르지 않습니다');
     }
+    if (cooldownUntil()) return fail(429, '429_CHEER_COOLDOWN', '패치는 5분에 한 번 보낼 수 있어요');
     await delay(1200); // Figma 304_AI검수중
     if (mockDetectCrisis(body.content)) return ok({ crisisDetected: true });
     if (mockIsInappropriate(body.content)) return fail(400, '400_CHEER_CONTACT_OR_LINK', '연락처나 링크는 보낼 수 없습니다');
     enqueue(body.targetEmotion, body.content);
+    db.lastSentAt = Date.now();
     db.sentByDate[todayStr()] = (db.sentByDate[todayStr()] ?? 0) + 1;
     return ok({ crisisDetected: false });
   }),
@@ -170,7 +182,7 @@ export const serverHandlers = [
   http.post('/api/v1/cheers/receive', async () => {
     const rec = db.records[db.records.length - 1];
     if (!rec) return fail(404, '404_NOT_FOUND', '먼저 마음을 골라 주세요');
-    if (db.receivedRecordIds.has(rec.id)) return fail(409, '409_ALREADY_RECEIVED', '이미 패치를 받았어요');
+    if (db.receivedRecordIds.has(rec.id)) return fail(409, '409_CONFLICT', '이미 처리된 요청입니다.');
     const fourthOrLater = rec.todayIndex >= 4;
     const received = rec.emotions.map((emotion) => {
       const queued = fourthOrLater ? null : takeFromQueue(emotion);
@@ -181,7 +193,14 @@ export const serverHandlers = [
     rec.patches = received.map((p) => ({ emotion: p.emotion, status: fourthOrLater ? 'DEFAULT_COMFORT' : 'RECEIVED', message: p.message }));
     await delay(900); // Figma 215_도착하는중
     return ok({
-      patches: received.map((p) => ({ cheerId: p.patchMessageId ?? 0, emotion: p.emotion, message: p.message, isDefault: p.isDefault })),
+      patches: received.map((p) => ({
+        cheerId: p.patchMessageId ?? 0,
+        emotion: p.emotion,
+        message: p.message,
+        isDefault: p.isDefault,
+        slotIndex: p.slotIndex,
+        blanketCompleted: p.blanketCompleted,
+      })),
     });
   }),
 
@@ -193,7 +212,7 @@ export const serverHandlers = [
     const pos = db.blankets.indexOf(blanket);
     return ok({
       blanketId: blanket.id,
-      slots: blanket.slots.map((x, slotIndex) => ({ slotIndex, filled: x !== null })),
+      slots: blanket.slots.map((x, slotIndex) => ({ slotIndex, filled: x !== null, emotion: x?.emotion ?? null })),
       hasPrevious: pos > 0,
       hasNext: pos < db.blankets.length - 1,
     });
