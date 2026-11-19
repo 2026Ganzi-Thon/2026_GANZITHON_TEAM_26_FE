@@ -1,4 +1,5 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { isAxiosError } from 'axios';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { authApi } from '../api/auth';
 import { onAuthFailure } from '../api/client';
 import { tokenStorage } from '../api/tokenStorage';
@@ -30,13 +31,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { isOnboardingCompleted: res.isOnboardingCompleted };
   }, []);
 
-  const logout = useCallback(async () => {
-    try {
-      await authApi.logout();
-    } finally {
-      tokenStorage.clear();
-      setLoggedIn(false);
-    }
+  // 진행 중인 로그아웃 요청 — 중복 클릭 시 같은 요청을 기다리게 함
+  const logoutPromise = useRef<Promise<void> | null>(null);
+
+  const logout = useCallback(() => {
+    logoutPromise.current ??= (async () => {
+      try {
+        await authApi.logout();
+      } catch (err) {
+        // 같은 토큰으로 두 번째 호출부터는 401 — 이미 로그아웃된 상태라 에러로 취급하지 않음
+        if (!(isAxiosError(err) && err.response?.status === 401)) throw err;
+      } finally {
+        tokenStorage.clear();
+        setLoggedIn(false);
+        logoutPromise.current = null;
+      }
+    })();
+    return logoutPromise.current;
   }, []);
 
   const value = useMemo(() => ({ isLoggedIn, login, logout }), [isLoggedIn, login, logout]);

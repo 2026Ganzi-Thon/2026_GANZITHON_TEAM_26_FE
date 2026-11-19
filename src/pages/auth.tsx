@@ -95,6 +95,7 @@ export function SignupPage() {
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
   const [codeSent, setCodeSent] = useState(false);
+  const [sendFailed, setSendFailed] = useState(false);
   const [verified, setVerified] = useState(false);
   const [password, setPassword] = useState('');
   const [agreed, setAgreed] = useState<Agreement[]>([]);
@@ -127,8 +128,18 @@ export function SignupPage() {
         <span>이메일</span>
         <div className="inline">
           <input className={`input ${email && !emailValid ? 'error' : ''}`} type="email" placeholder="이메일 입력" value={email} disabled={verified} onChange={(e) => setEmail(e.target.value)} />
-          <button type="button" className="btn" disabled={!emailValid || verified || pending} onClick={() => run(async () => { await authApi.sendEmailCode({ email }); setCodeSent(true); })}>
-            {codeSent ? '재전송' : '인증 요청'}
+          <button type="button" className="btn" disabled={!emailValid || verified || pending} onClick={() => run(async () => {
+            try {
+              await authApi.sendEmailCode({ email });
+            } catch (err) {
+              // 500_EMAIL_SEND_FAILED: 다시 보내면 될 수 있으니 재시도 버튼으로 안내
+              setSendFailed(parseApiError(err).code === '500_EMAIL_SEND_FAILED');
+              throw err;
+            }
+            setSendFailed(false);
+            setCodeSent(true);
+          })}>
+            {sendFailed ? '다시 보내기' : codeSent ? '재전송' : '인증 요청'}
           </button>
         </div>
         {email && !emailValid && <ErrorText text="이메일 형식을 확인해 주세요" />}
