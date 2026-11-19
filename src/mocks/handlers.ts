@@ -3,7 +3,7 @@
  * - featureHandlers: 서버에 아직 없는 API (VITE_USE_MOCK=true면 항상 켜짐) — 지금은 없음
  * - serverHandlers: 서버에 이미 있는 API의 목업 (VITE_MOCK_AUTH=true일 때만 — 백엔드 없이 시연용)
  *     인증, 마음 기록(moods), 사연 검사, 캘린더, 보내기 질문·패치 보내기(cheers),
- *     온기 지도, 패치 받기, 패치 신고, 담요·담요 칸 — 응답은 Swagger 형식 그대로
+ *     온기 지도, 패치 받기, 패치 신고, 담요·담요 칸, 함께 쉬는 방 — 응답은 Swagger 형식 그대로
  * 실제 API가 나오면 featureHandlers에서 해당 핸들러를 지우면 그 요청은 진짜 서버로 간다.
  */
 import { http, HttpResponse, delay, type HttpHandler } from 'msw';
@@ -40,7 +40,24 @@ const QUESTIONS = [
 export const featureHandlers: HttpHandler[] = [];
 
 /* ───────────── 서버에 있는 API의 목업 (백엔드 없이 시연할 때만) ───────────── */
+/** 함께 쉬는 방 목업 — 입장 시각 (퇴장하면 null) */
+let restEnteredAt: string | null = null;
+const REST_MOCK_COUNT = 7; // 나 포함 → 화면엔 "6명과 함께" (Figma 224)
+
 export const serverHandlers = [
+  /* 함께 쉬는 방 */
+  http.post('/api/v1/interactions/rest-room', () => {
+    restEnteredAt ??= new Date().toISOString();
+    return ok({ currentCount: REST_MOCK_COUNT, enteredAt: restEnteredAt });
+  }),
+  http.put('/api/v1/interactions/rest-room', () =>
+    restEnteredAt ? ok({ currentCount: REST_MOCK_COUNT }) : fail(400, '400_REST_ROOM_NOT_ENTERED', '휴식방에 입장한 상태가 아닙니다.'),
+  ),
+  http.delete('/api/v1/interactions/rest-room', () => {
+    restEnteredAt = null;
+    return ok(null);
+  }),
+
   /* BLK-RPT-001 신고 → 같은 자리 교체 (응답은 Swagger 형식: data.replaced = ReceivedCheerResponse) */
   http.post('/api/v1/cheers/:cheerId/report', ({ params }) => {
     const cheerId = Number(params.cheerId);

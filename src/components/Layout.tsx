@@ -54,8 +54,8 @@ const TABS = [
 /** 하단 탭바 화면 — Figma TabBar: h88, 탭 간격 76, 활성 탭은 베이지 아이콘 박스 + Bold */
 export function TabLayout() {
   const { pathname } = useLocation();
-  // 온기 지도·패치 받기는 홈 흐름이라 홈 탭을 켜 둔다 (Figma 208/217)
-  const homeFlow = ['/map', '/receive'].includes(pathname);
+  // 온기 지도·패치 받기·함께 쉬는 방은 홈 흐름이라 홈 탭을 켜 둔다 (Figma 208/217/224)
+  const homeFlow = ['/map', '/receive', '/rest'].includes(pathname);
   return (
     <div className="app-frame with-tabbar">
       <div className="app-body">

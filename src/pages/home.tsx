@@ -1,4 +1,4 @@
-/** 2xx 홈 — 마음 고르기(201), 사연(205/206), 온기 지도(208~214), 패치 받기(215~223) */
+/** 2xx 홈 — 마음 고르기(201), 사연(205/206), 온기 지도(208~214), 패치 받기(215~223) · 함께 쉬는 방(224)은 rest.tsx */
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useRef, useState } from 'react';
 import type { PointerEvent } from 'react';
@@ -192,8 +192,7 @@ export function WarmthMapPage() {
       <Spacer />
       <button className="btn" onClick={() => navigate('/receive', { state: rec })}>패치 받기</button>
       <div className="btn-row">
-        {/* ITR-REST-001 함께 쉬는 방은 P1 */}
-        <button className="btn secondary" disabled>함께 쉬기</button>
+        <button className="btn secondary" onClick={() => navigate('/rest')}>함께 쉬기</button>
         <button className="btn secondary" onClick={() => navigate('/')}>다른 마음 고르기</button>
       </div>
     </>
@@ -371,7 +370,7 @@ export function ReceivePage() {
       <button className="btn" onClick={() => navigate('/send')}>나도 패치 선물하기</button>
       <div className="btn-row">
         <button className="btn secondary" onClick={() => navigate('/')}>다른 마음 고르기</button>
-        <button className="btn secondary" disabled>함께 쉬기</button>
+        <button className="btn secondary" onClick={() => navigate('/rest')}>함께 쉬기</button>
       </div>
       {toast && <Toast>{toast}</Toast>}
     </>

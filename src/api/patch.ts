@@ -2,7 +2,7 @@
  * 기능 API
  * - 실제 서버(nyam17.site): 마음 기록(moods), 사연 위기 검사, 캘린더, 그날 기록, 상세·삭제,
  *   보내기 질문(cheers/availability), 패치 보내기(cheers), 온기 지도, 패치 받기, 담요·담요 칸
- *   패치 신고(cheers/{cheerId}/report)
+ *   패치 신고(cheers/{cheerId}/report), 함께 쉬는 방(interactions/rest-room)
  * 서버 응답은 여기서 화면용 모양으로 바꿔서 돌려준다 → 서버 형식이 바뀌어도 화면 코드는 그대로.
  */
 import type {
@@ -32,12 +32,15 @@ import type {
   ServerReceiveResponse,
   ServerReceivedCheer,
   ServerReportResponse,
+  ServerRestRoomEntryResponse,
+  ServerRestRoomSignalResponse,
   ServerRecordDetailResponse,
   ServerStoryCheckResponse,
   WarmthMapResponse,
 } from '../types/api';
 import { api, unwrap } from './client';
 import { cheerRejectReason } from './errors';
+import { tokenStorage } from './tokenStorage';
 
 const pad = (n: number) => String(n).padStart(2, '0');
 /** ISO date-time → 'HH:mm' (기기 로컬 시간) */
@@ -203,5 +206,28 @@ export const blanketApi = {
       receivedAt: r.receivedAt,
       hasRecordOnDate: r.hasMoodRecordOnDate,
     };
+  },
+};
+
+/* ───────── 함께 쉬는 방 (ITR-REST-001) ───────── */
+
+const REST_ROOM_URL = '/api/v1/interactions/rest-room';
+
+export const restRoomApi = {
+  /** 입장 — 현재 인원과 입장 시각 */
+  enter: () => unwrap(api.post<ApiResponse<ServerRestRoomEntryResponse>>(REST_ROOM_URL)),
+  /** 하트비트 — 머물러 있다고 알리고 현재 인원을 받는다. 퇴장 뒤에 오면 400_REST_ROOM_NOT_ENTERED */
+  heartbeat: () => unwrap(api.put<ApiResponse<ServerRestRoomSignalResponse>>(REST_ROOM_URL)),
+  /** 퇴장 */
+  leave: () => unwrap(api.delete<ApiResponse<null>>(REST_ROOM_URL)),
+  /** 탭을 닫거나 새로고침할 때 — 페이지가 사라져도 요청이 끝까지 가도록 keepalive fetch 사용 */
+  leaveOnUnload() {
+    const token = tokenStorage.getAccess();
+    if (!token) return;
+    void fetch(`${api.defaults.baseURL ?? ''}${REST_ROOM_URL}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` },
+      keepalive: true,
+    }).catch(() => {});
   },
 };

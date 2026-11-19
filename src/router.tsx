@@ -4,6 +4,7 @@ import { PlainLayout, TabLayout } from './components/Layout';
 import { LoginPage, SignupPage } from './pages/auth';
 import { HelpPage, MyPage } from './pages/etc';
 import { EmotionPickPage, ReceivePage, StoryPage, WarmthMapPage } from './pages/home';
+import { RestRoomPage } from './pages/rest';
 import { BlanketPage, RecordDetailPage, RecordsPage } from './pages/records';
 import { SendPage } from './pages/send';
 
@@ -35,6 +36,7 @@ export const router = createBrowserRouter([
           { path: '/', element: <EmotionPickPage /> },
                     { path: '/map', element: <WarmthMapPage /> },
           { path: '/receive', element: <ReceivePage /> },
+          { path: '/rest', element: <RestRoomPage /> },
           { path: '/send', element: <SendPage /> },
           { path: '/records', element: <RecordsPage /> },
           { path: '/records/:recordId', element: <RecordDetailPage /> },
