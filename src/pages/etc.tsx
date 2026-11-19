@@ -74,7 +74,9 @@ export function MyPage() {
           title="로그아웃할까요?"
           confirmLabel="로그아웃"
           onCancel={() => setConfirm(false)}
-          onConfirm={async () => { await logout(); navigate('/login', { replace: true }); }}
+          onConfirm={async () => {
+            try { await logout(); } finally { navigate('/login', { replace: true }); }
+          }}
         />
       )}
     </>

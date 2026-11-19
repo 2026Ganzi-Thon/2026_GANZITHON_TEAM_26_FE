@@ -27,6 +27,8 @@ const MESSAGES: Record<string, string> = {
   '409_EMAIL_DUPLICATED': '이미 가입된 이메일이에요',
   '400_EMAIL_NOT_VERIFIED': '이메일 인증을 먼저 해 주세요',
   '400_TERMS_NOT_AGREED': '필수 약관에 모두 동의해 주세요',
+  // 메일 서버 문제가 아닌 서비스 내부 로직 실패 시 (서버 message: '인증 메일을 보내지 못했습니다.')
+  '500_EMAIL_SEND_FAILED': '인증 메일을 보내지 못했어요. 다시 시도해 주세요',
   '429_EMAIL_REQUEST_LIMITED': '인증 요청이 너무 많아요. 5분 뒤에 다시 시도해 주세요',
   '404_EMAIL_CODE_NOT_FOUND': '인증번호가 만료됐어요. 다시 요청해 주세요',
   '400_EMAIL_CODE_MISMATCH': '인증번호가 맞지 않아요',
