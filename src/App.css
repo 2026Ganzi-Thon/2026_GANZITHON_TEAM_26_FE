@@ -1315,3 +1315,53 @@ button.tile:active {
     transition: none;
   }
 }
+
+/* ───────── 224 함께 쉬는 방 — 바깥 원 250 · 안쪽 원 168(호흡에 맞춰 커졌다 작아짐) · 타이머 36 Bold ───────── */
+.rest-title {
+  margin-top: 8px;
+}
+.rest-stage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-top: 56px;
+}
+.rest-halo {
+  display: grid;
+  place-items: center;
+  width: 250px;
+  height: 250px;
+  border-radius: 50%;
+  background: #f8f2ed;
+}
+.rest-breath {
+  display: grid;
+  place-items: center;
+  width: 168px;
+  height: 168px;
+  border-radius: 50%;
+  background: #e8d2c3;
+  font: 700 17px/1.4 var(--font-family);
+  color: var(--color-bk);
+  animation: rest-breath 8s ease-in-out infinite;
+}
+@keyframes rest-breath {
+  0%,
+  100% {
+    transform: scale(0.88);
+  }
+  50% {
+    transform: scale(1.06);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rest-breath {
+    animation: none;
+  }
+}
+.rest-timer {
+  margin: 32px 0 2px;
+  font: 700 36px/1.2 var(--font-family);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-bk);
+}

@@ -250,3 +250,14 @@ export interface BlanketSlotDetail {
   /** 받은 날 마음 기록이 남아 있는지 — false면 '이날의 기록은 지워졌어요'(414) */
   hasRecordOnDate: boolean;
 }
+
+/* ───── 함께 쉬는 방 (ITR-REST-001) ───── */
+/** POST /api/v1/interactions/rest-room */
+export interface ServerRestRoomEntryResponse {
+  currentCount: number;
+  enteredAt: string;
+}
+/** PUT /api/v1/interactions/rest-room (하트비트) */
+export interface ServerRestRoomSignalResponse {
+  currentCount: number;
+}
