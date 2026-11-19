@@ -10,6 +10,9 @@ async function enableMocking() {
   await worker.start({ onUnhandledFrame: 'bypass' });
 }
 
+// 아이폰 사파리는 viewport의 user-scalable=no를 무시하므로 두 손가락 확대를 직접 막는다
+document.addEventListener('gesturestart', (e) => e.preventDefault());
+
 enableMocking().then(() => {
   createRoot(document.getElementById('root')!).render(
     <StrictMode>
